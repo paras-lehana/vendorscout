@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VendorScout — Live Browser Theater</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    body { background: radial-gradient(1200px 600px at 70% -10%, #1e293b 0%, #0b1120 55%, #060912 100%); }
+    .glass { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); backdrop-filter: blur(12px); }
+    .grad { background: linear-gradient(90deg,#818cf8,#22d3ee,#34d399); -webkit-background-clip:text; background-clip:text; color:transparent; }
+    .chrome-dot{width:11px;height:11px;border-radius:9999px;display:inline-block}
+    .scroll::-webkit-scrollbar{width:6px}.scroll::-webkit-scrollbar-thumb{background:#334155;border-radius:9999px}
+    @keyframes ripple{0%{transform:scale(.4);opacity:.7}100%{transform:scale(1.6);opacity:0}}
+    .pulse-dot{animation:pulse 1.4s infinite}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  </style>
+</head>
+<body class="text-slate-200 min-h-screen" x-data="theater()">
+  <div class="max-w-7xl mx-auto px-4 py-6">
+    <!-- Header -->
+    <header class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold grad">VendorScout · Live Browser Theater</h1>
+        <p class="text-slate-400 text-sm">Watch the autonomous agent plan, browse, act &amp; recover — live.</p>
+      </div>
+      <span class="text-xs px-3 py-1 rounded-full glass">Azure OpenAI · Playwright · Agentic Web</span>
+    </header>
+
+    <!-- Mission bar -->
+    <div class="glass rounded-2xl p-4 mb-6">
+      <div class="grid md:grid-cols-12 gap-3 items-end">
+        <div class="md:col-span-7">
+          <label class="text-xs text-slate-400">Mission goal</label>
+          <input x-model="goal" type="text" class="w-full mt-1 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400"
+                 placeholder="e.g. Search IndiaMART for industrial RO membrane suppliers and extract the top 5 company names, products and prices" />
+        </div>
+        <div class="md:col-span-3">
+          <label class="text-xs text-slate-400">Start URL</label>
+          <input x-model="url" type="text" class="w-full mt-1 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+        </div>
+        <div class="md:col-span-2">
+          <button @click="launch()" :disabled="running || !goal.trim() || !url.trim()"
+                  class="w-full py-2 rounded-lg font-semibold text-slate-900 bg-gradient-to-r from-indigo-400 via-cyan-400 to-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed">
+            <span x-show="!running">▶ Launch mission</span>
+            <span x-show="running">● Running…</span>
+          </button>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-3 flex-wrap" x-show="!running">
+        <template x-for="ex in examples" :key="ex.goal">
+          <button @click="goal=ex.goal; url=ex.url; allowSubmit=!!ex.submit"
+                  class="text-xs px-3 py-1 rounded-full glass hover:border-indigo-400 text-slate-300" x-text="ex.label"></button>
+        </template>
+      </div>
+    </div>
+
+    <div class="grid lg:grid-cols-12 gap-6">
+      <!-- Theater (browser viewport) -->
+      <div class="lg:col-span-8">
+        <div class="glass rounded-2xl overflow-hidden">
+          <div class="flex items-center gap-2 px-4 py-2 border-b border-white/10 bg-slate-900/40">
+            <span class="chrome-dot bg-red-400"></span><span class="chrome-dot bg-yellow-400"></span><span class="chrome-dot bg-green-400"></span>
+            <div class="ml-3 flex-1 truncate text-xs text-slate-400 bg-slate-800/60 rounded px-2 py-1" x-text="currentUrl || 'about:blank'"></div>
+            <span class="text-xs" :class="statusColor()" x-text="status"></span>
+          </div>
+          <div class="relative bg-black/40" style="aspect-ratio:16/10">
+            <img x-show="frame" :src="frame" class="w-full h-full object-contain" alt="agent view" />
+            <div x-show="!frame" class="absolute inset-0 flex flex-col items-center justify-center text-slate-500">
+              <div class="text-5xl mb-2">🎬</div>
+              <p class="text-sm">Launch a mission to watch the agent browse live.</p>
+            </div>
+            <div x-show="running" class="absolute top-3 right-3 flex items-center gap-2 text-xs glass px-2 py-1 rounded-full">
+              <span class="chrome-dot bg-emerald-400 pulse-dot"></span> agent acting
+            </div>
+          </div>
+          <div class="px-4 py-2 text-xs text-slate-400 border-t border-white/10 flex justify-between">
+            <span>Step <span x-text="stepCount" class="text-slate-200 font-semibold"></span></span>
+            <span x-show="result"><span x-text="result?.num_steps"></span> actions · <span x-text="Math.round((result?.duration_ms||0)/1000)"></span>s</span>
+          </div>
+        </div>
+
+        <!-- Final result -->
+        <div x-show="result" class="glass rounded-2xl p-4 mt-4">
+          <h3 class="font-semibold mb-2" :class="result?.success ? 'text-emerald-300':'text-amber-300'"
+              x-text="result?.success ? '✓ Mission complete — extracted result' : '⚠ Finished with partial/failed result'"></h3>
+          <pre class="text-xs bg-slate-900/60 rounded-lg p-3 overflow-auto scroll max-h-72" x-text="JSON.stringify(result?.extracted ?? result?.error, null, 2)"></pre>
+        </div>
+      </div>
+
+      <!-- Step timeline (the agent's thoughts) -->
+      <div class="lg:col-span-4">
+        <div class="glass rounded-2xl p-4 h-full">
+          <h3 class="font-semibold text-slate-200 mb-1">Agent timeline</h3>
+          <p class="text-xs text-slate-500 mb-3" x-show="goalShown" x-text="'Goal: ' + goalShown"></p>
+          <div class="space-y-2 overflow-auto scroll" style="max-height:62vh">
+            <template x-for="(s,i) in steps" :key="i">
+              <div class="rounded-lg px-3 py-2 text-sm border"
+                   :class="s.kind==='recover' ? 'border-amber-500/40 bg-amber-500/10' : (s.kind==='done' ? 'border-emerald-500/40 bg-emerald-500/10' : 'border-white/10 bg-slate-900/40')">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs"
+                        x-text="s.kind==='recover' ? '↻' : (s.kind==='done' ? '✓' : '•')"
+                        :class="s.kind==='recover' ? 'text-amber-300' : (s.kind==='done' ? 'text-emerald-300':'text-cyan-300')"></span>
+                  <span class="text-xs text-slate-500" x-text="s.label"></span>
+                </div>
+                <p class="text-slate-200 mt-1 leading-snug" x-text="s.text"></p>
+              </div>
+            </template>
+            <div x-show="steps.length===0" class="text-sm text-slate-500">No steps yet.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function theater(){
+      return {
+        goal: "Search IndiaMART for industrial RO membrane water purifier suppliers and extract the top 5 company names, their products and any prices shown.",
+        url: "https://www.indiamart.com",
+        running:false, status:"idle", frame:null, currentUrl:"", steps:[], stepCount:0, result:null, goalShown:"", allowSubmit:false,
+        examples:[
+          {label:"⚡ Instant demo (example.com · ~4s)", url:"https://example.com", goal:"Read the page heading and return it as JSON {heading} then finish."},
+          {label:"🏭 IndiaMART · RO membranes (~30s)", url:"https://www.indiamart.com", goal:"Search IndiaMART for industrial RO membrane suppliers and extract the top 5 company names, products and prices as JSON {suppliers:[{name,product,price,location}]}."},
+          {label:"🤝 Send an RFQ — live transaction (~25s)", url:"/mock/supplier", submit:true, goal:"On this supplier page, complete a Request-for-Quote: open/scroll to the 'Send Enquiry' form, fill product='8040 RO membrane, 5000 GPD', quantity='500 pieces', name='VendorScout Buyer', email='sourcing@vendorscout.demo', phone='9999999999', message='Please share best quote, MOQ, lead time and certifications.', then SUBMIT the form. Verify the success acknowledgement and return JSON {submitted:true, reference:<the acknowledgement reference shown>}."},
+          {label:"🔌 IndiaMART · LED drivers (~30s)", url:"https://www.indiamart.com", goal:"Search IndiaMART for 'LED driver 36W' suppliers and extract company names, locations and prices for the first 5 results as JSON {suppliers:[...]}."},
+        ],
+        statusColor(){ return this.status==='running'?'text-emerald-300':(this.status==='completed'?'text-emerald-300':(this.status==='failed'?'text-amber-300':'text-slate-400')); },
+        async launch(){
+          // Resolve a relative URL (e.g. the mock supplier) against this origin.
+          const targetUrl = this.url.startsWith("/") ? (location.origin + this.url) : this.url;
+          this.running=true; this.status="running"; this.frame=null; this.steps=[]; this.stepCount=0; this.result=null; this.currentUrl=targetUrl; this.goalShown=this.goal;
+          let r;
+          try{
+            r = await (await fetch("/api/mission",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({goal:this.goal,url:targetUrl,allow_submit:this.allowSubmit})})).json();
+          }catch(e){ this.status="failed"; this.running=false; this.steps.unshift({kind:'recover',label:'error',text:'Could not start mission: '+e}); return; }
+          const es = new EventSource(r.stream_url);
+          es.onmessage = (m)=>{
+            let ev; try{ ev=JSON.parse(m.data); }catch{ return; }
+            if(ev.type==="GOAL"){ this.goalShown=ev.goal; this.currentUrl=ev.url; }
+            else if(ev.type==="STEP"){
+              this.stepCount = (ev.step??this.stepCount)+1;
+              if(ev.screenshot) this.frame = "data:image/jpeg;base64,"+ev.screenshot;
+              if(ev.url) this.currentUrl = ev.url;
+              if(ev.thought) this.steps.unshift({kind:'step',label:'step '+(ev.step??''),text:ev.thought});
+            }
+            else if(ev.type==="RECOVER"){ this.steps.unshift({kind:'recover',label:'recover',text:ev.message||ev.error||'re-planning after a failure'}); }
+            else if(ev.type==="RESULT"){ this.result={success:ev.success,extracted:ev.extracted,num_steps:ev.num_steps,duration_ms:ev.duration_ms,error:ev.error}; this.status=ev.success?"completed":"failed"; this.steps.unshift({kind:'done',label:'done',text: ev.success?'Mission complete.':'Finished with partial result.'}); }
+            else if(ev.type==="ERROR"){ this.status="failed"; this.steps.unshift({kind:'recover',label:'error',text:ev.message}); }
+            else if(ev.type==="END"){ this.running=false; es.close(); }
+          };
+          es.onerror = ()=>{ this.running=false; es.close(); if(this.status==='running') this.status='failed'; };
+        }
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,654 @@
+{% extends "base.html" %}
+
+{% block title %}Research in Progress - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div x-data="researchTracker('{{ job_id }}')" x-init="init()" class="space-y-8">
+    
+    <!-- ---- Header with query info ---- -->
+    <div class="flex items-start justify-between animate-fade-in">
+        <div>
+            <div class="flex items-center gap-3 mb-2">
+                <div class="w-3 h-3 rounded-full" 
+                     :class="{'bg-blue-400 animate-pulse': status === 'running', 'bg-green-400': status === 'completed', 'bg-red-400': status === 'failed', 'bg-yellow-400': status === 'queued'}">
+                </div>
+                <h1 class="text-2xl font-bold text-white" x-text="statusLabel"></h1>
+            </div>
+            <p class="text-gray-400 max-w-2xl" x-show="job">
+                Query: "<span x-text="job?.query || 'Loading...'" class="text-gray-300 italic"></span>"
+            </p>
+            <p class="text-xs text-gray-500 mt-2">
+                You can safely leave this page and continue later from the home screen.
+            </p>
+        </div>
+        
+        <!-- Timer -->
+        <div class="flex flex-col items-end gap-3">
+            <div class="glass-card rounded-xl px-4 py-3 text-center">
+                <div class="text-2xl font-mono font-bold text-brand-400" x-text="elapsedTime"></div>
+                <div class="text-xs text-gray-500">Elapsed</div>
+            </div>
+            <a href="/"
+               class="inline-flex items-center gap-2 px-4 py-2 rounded-xl glass-card text-sm text-white hover:bg-white/10 transition-all">
+                <i data-lucide="home" class="w-4 h-4"></i>
+                Back Home
+            </a>
+        </div>
+    </div>
+    
+    <!-- ---- Progress Bar ---- -->
+    <div class="glass rounded-xl p-4 animate-slide-up">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-sm text-gray-400">Pipeline Progress</span>
+            <span class="text-sm text-brand-300 font-medium" x-text="progressPercent + '%'"></span>
+        </div>
+        <div class="w-full h-2 rounded-full bg-slate-800/60 overflow-hidden">
+            <div class="progress-bar h-full rounded-full bg-gradient-to-r from-brand-500 to-purple-500"
+                 :style="'width: ' + progressPercent + '%'">
+            </div>
+        </div>
+        <div class="flex justify-between mt-2 text-xs">
+            <template x-for="stage in pipelineStages" :key="stage.id">
+                <div class="flex flex-col items-center gap-1 relative group">
+                    <div class="flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-full"
+                              :class="{
+                                  'bg-gray-600': stage.status === 'waiting',
+                                  'bg-blue-400 animate-pulse': stage.status === 'running',
+                                  'bg-green-400': stage.status === 'completed',
+                                  'bg-yellow-400': stage.status === 'skipped',
+                                  'bg-red-400': stage.status === 'failed'
+                              }"></span>
+                        <span :class="{
+                                  'text-gray-500': stage.status === 'waiting',
+                                  'text-blue-300': stage.status === 'running',
+                                  'text-green-400': stage.status === 'completed',
+                                  'text-yellow-400': stage.status === 'skipped',
+                                  'text-red-400': stage.status === 'failed'
+                              }" x-text="stage.label"></span>
+                    </div>
+                    <button x-show="stage.status === 'running' && status === 'running'"
+                            @click="skipStage(stage.id)"
+                            class="absolute -bottom-6 text-[10px] px-2 py-0.5 rounded glass text-brand-300 hover:bg-brand-500/10 transition-all whitespace-nowrap opacity-0 group-hover:opacity-100">
+                        ⏭ Skip
+                    </button>
+                </div>
+            </template>
+        </div>
+    </div>
+    
+    <!-- ---- Research not found (unknown/stale job) ---- -->
+    <div x-show="status === 'notfound'" x-cloak
+         class="glass-card rounded-2xl p-8 text-center animate-fade-in">
+        <div class="text-4xl mb-3">🔍</div>
+        <h2 class="text-xl font-semibold text-white mb-1">Research not found</h2>
+        <p class="text-gray-400 mb-5">This research job doesn't exist or has expired. Start a new one.</p>
+        <div class="flex items-center justify-center gap-3">
+            <a href="/" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-brand-500 to-purple-600 text-white font-semibold">Start a new search</a>
+            <a href="/theater" class="px-5 py-2.5 rounded-xl glass-card text-white font-semibold">Live Browser Theater</a>
+        </div>
+    </div>
+
+    <!-- ---- Pipeline Controls (stop / fast-forward) ---- -->
+    <div x-show="status === 'running'" x-cloak
+         class="flex flex-wrap items-center gap-3 animate-fade-in">
+        <button @click="fastForward()"
+                :disabled="fastForwarding"
+                class="inline-flex items-center gap-2 px-4 py-2 rounded-xl glass-card text-sm text-brand-300 hover:bg-brand-500/10 transition-all border border-brand-500/20 disabled:opacity-50 disabled:cursor-not-allowed">
+            <i data-lucide="skip-forward" class="w-4 h-4"></i>
+            <span x-text="fastForwarding ? 'Finishing current agents…' : 'Continue with Current Results'"></span>
+        </button>
+        <button @click="stopResearch()"
+                :disabled="stopping"
+                class="inline-flex items-center gap-2 px-4 py-2 rounded-xl glass-card text-sm text-red-400 hover:bg-red-500/10 transition-all border border-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed">
+            <i data-lucide="square" class="w-4 h-4"></i>
+            <span x-text="stopping ? 'Stopping…' : 'Stop Research'"></span>
+        </button>
+    </div>
+    
+    <!-- ---- Two Column Layout: Agent Timeline + Live Findings ---- -->
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        
+        <!-- ---- Left: Agent Activity Timeline (3 cols) ---- -->
+        <div class="lg:col-span-3 space-y-4">
+            <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+                <i data-lucide="activity" class="w-5 h-5 text-brand-400"></i>
+                Agent Activity
+            </h2>
+            
+            <div class="glass rounded-xl p-5 max-h-[600px] overflow-y-auto">
+                <!-- Timeline items generated from SSE events -->
+                <div class="relative space-y-4">
+                    <template x-for="(event, index) in events" :key="index">
+                        <div class="flex gap-4 animate-fade-in" :class="{'opacity-50': event.status === 'completed' && status === 'running'}">
+                            <!-- Status dot with connector line -->
+                            <div class="relative flex-shrink-0">
+                                <div class="w-9 h-9 rounded-lg flex items-center justify-center"
+                                     :class="{
+                                         'bg-blue-500/10 border border-blue-500/20': event.status === 'running',
+                                         'bg-green-500/10 border border-green-500/20': event.status === 'completed',
+                                         'bg-yellow-500/10 border border-yellow-500/20': event.status === 'skipped',
+                                         'bg-red-500/10 border border-red-500/20': event.status === 'failed'
+                                     }">
+                                    <template x-if="event.status === 'running'">
+                                        <svg class="animate-spin h-4 w-4 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                        </svg>
+                                    </template>
+                                    <template x-if="event.status === 'completed'">
+                                        <i data-lucide="check" class="w-4 h-4 text-green-400"></i>
+                                    </template>
+                                    <template x-if="event.status === 'skipped'">
+                                        <i data-lucide="skip-forward" class="w-4 h-4 text-yellow-400"></i>
+                                    </template>
+                                    <template x-if="event.status === 'failed'">
+                                        <i data-lucide="x" class="w-4 h-4 text-red-400"></i>
+                                    </template>
+                                </div>
+                            </div>
+                            
+                            <!-- Event content -->
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="text-sm font-semibold capitalize"
+                                          :class="{
+                                              'text-blue-300': event.agent === 'orchestrator',
+                                              'text-green-300': event.agent === 'research',
+                                              'text-yellow-300': event.agent === 'compliance',
+                                              'text-emerald-300': event.agent === 'financial',
+                                              'text-red-300': event.agent === 'risk',
+                                              'text-cyan-300': event.agent === 'authenticity',
+                                              'text-amber-300': event.agent === 'price_comparison' || event.agent === 'analysis',
+                                              'text-violet-300': event.agent === 'specification',
+                                              'text-purple-300': event.agent === 'report',
+                                              'text-gray-300': event.agent === 'system'
+                                          }"
+                                          x-text="agentLabel(event.agent)">
+                                    </span>
+                                    <span class="text-xs px-2 py-0.5 rounded-full"
+                                          :class="{
+                                              'bg-blue-500/10 text-blue-400': event.status === 'running',
+                                              'bg-green-500/10 text-green-400': event.status === 'completed',
+                                              'bg-yellow-500/10 text-yellow-400': event.status === 'skipped',
+                                              'bg-red-500/10 text-red-400': event.status === 'failed'
+                                          }"
+                                          x-text="event.status">
+                                    </span>
+                                    <span x-show="event.findings_count > 0" 
+                                          class="text-xs px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-300">
+                                        <span x-text="event.findings_count"></span> findings
+                                    </span>
+                                </div>
+                                <p class="text-sm text-gray-400 leading-relaxed" x-text="event.message"></p>
+                                <span class="text-xs text-gray-600 mt-1 block" x-text="formatTime(event.timestamp)"></span>
+                                <!-- V2.2: Skip button for running agent events -->
+                                <div x-show="event.status === 'running' && status === 'running'" class="mt-1.5">
+                                    <button @click="skipAgent(event.agent)"
+                                            class="text-xs px-2 py-1 rounded glass text-gray-500 hover:text-brand-300 hover:bg-brand-500/5 transition-all inline-flex items-center gap-1">
+                                        <i data-lucide="skip-forward" class="w-3 h-3"></i>
+                                        Skip this agent
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                    
+                    <!-- Empty state -->
+                    <div x-show="events.length === 0" class="text-center py-8">
+                        <div class="shimmer w-full h-4 rounded mb-3 max-w-md mx-auto"></div>
+                        <div class="shimmer w-full h-4 rounded mb-3 max-w-sm mx-auto"></div>
+                        <div class="shimmer w-full h-4 rounded max-w-xs mx-auto"></div>
+                        <p class="text-gray-500 text-sm mt-4">Connecting to agent pipeline...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ---- Right: Agent Status Cards (2 cols) ---- -->
+        <div class="lg:col-span-2 space-y-4">
+            <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+                <i data-lucide="cpu" class="w-5 h-5 text-purple-400"></i>
+                Agent Status
+            </h2>
+            
+            <div class="space-y-3">
+                <!-- Agent status cards -->
+                <template x-for="agent in agentList" :key="agent.id">
+                    <div class="glass-card rounded-xl p-4 transition-all"
+                         :class="{
+                             'border-blue-500/30 shadow-blue-500/5 shadow-lg': agent.status === 'running',
+                             'border-green-500/30 bg-green-500/5': agent.status === 'completed',
+                             'border-green-500/20 bg-green-500/5': agent.status === 'skipped'
+                         }">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-lg flex items-center justify-center text-lg"
+                                     :class="agent.bgClass">
+                                    <span x-text="agent.icon"></span>
+                                </div>
+                                <div>
+                                    <div class="text-sm font-semibold text-white" x-text="agent.label"></div>
+                                    <div class="text-xs text-gray-500" x-text="agent.role"></div>
+                                </div>
+                            </div>
+                            <div>
+                                <template x-if="agent.status === 'waiting'">
+                                    <span class="text-xs text-gray-500 px-2 py-1 rounded-full bg-gray-500/10">Waiting</span>
+                                </template>
+                                <template x-if="agent.status === 'running'">
+                                    <span class="text-xs text-blue-400 px-2 py-1 rounded-full bg-blue-500/10 animate-pulse">Running</span>
+                                </template>
+                                <template x-if="agent.status === 'completed'">
+                                    <span class="text-xs text-green-400 px-2 py-1 rounded-full bg-green-500/10">Done ✓</span>
+                                </template>
+                                <template x-if="agent.status === 'skipped'">
+                                    <span class="text-xs text-yellow-400 px-2 py-1 rounded-full bg-yellow-500/10">Partial ✓</span>
+                                </template>
+                                <template x-if="agent.status === 'failed'">
+                                    <span class="text-xs text-red-400 px-2 py-1 rounded-full bg-red-500/10">Failed ✗</span>
+                                </template>
+                            </div>
+                        </div>
+                        <!-- V2.2: Skip button for running agents -->
+                        <div x-show="agent.status === 'running' && status === 'running'" class="mt-2 pt-2 border-t border-white/5">
+                            <button @click="skipAgent(agent.id)"
+                                    class="w-full text-xs px-3 py-1.5 rounded-lg glass text-gray-400 hover:text-brand-300 hover:bg-brand-500/5 transition-all flex items-center justify-center gap-1">
+                                <i data-lucide="skip-forward" class="w-3 h-3"></i>
+                                Continue with Current
+                            </button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+            
+            <!-- ---- Quick Stats ---- -->
+            <div class="glass rounded-xl p-5 mt-6" x-show="vendorsFound > 0">
+                <h3 class="text-sm font-semibold text-gray-400 mb-3">Research Stats</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-2xl font-bold text-white" x-text="vendorsFound"></div>
+                        <div class="text-xs text-gray-500">Vendors Found</div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold text-white" x-text="totalFindings"></div>
+                        <div class="text-xs text-gray-500">Total Findings</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ---- Completion CTA ---- -->
+    <div x-show="status === 'completed'" class="glass rounded-2xl p-8 text-center animate-slide-up">
+        <div class="w-16 h-16 rounded-2xl bg-green-500/10 border border-green-500/20 flex items-center justify-center mx-auto mb-4">
+            <i data-lucide="check-circle" class="w-8 h-8 text-green-400"></i>
+        </div>
+        <h2 class="text-2xl font-bold text-white mb-2">Research Complete!</h2>
+        <p class="text-gray-400 mb-6">
+            Found and analyzed <span x-text="vendorsFound" class="text-brand-300 font-semibold"></span> vendors.
+            View the full report with rankings, comparison matrix, and executive summary.
+        </p>
+        <a :href="'/report/' + jobId" 
+           class="inline-flex items-center gap-2 px-8 py-3 rounded-xl bg-gradient-to-r from-brand-500 to-purple-600 text-white font-semibold
+                  hover:from-brand-600 hover:to-purple-700 transition-all shadow-lg shadow-brand-500/25">
+            <i data-lucide="file-text" class="w-5 h-5"></i>
+            View Full Report
+        </a>
+    </div>
+    
+    <!-- ---- Failure notice ---- -->
+    <div x-show="status === 'failed'" class="glass rounded-2xl p-8 text-center animate-slide-up border border-red-500/20">
+        <div class="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-4">
+            <i data-lucide="alert-triangle" class="w-8 h-8 text-red-400"></i>
+        </div>
+        <h2 class="text-2xl font-bold text-white mb-2">Research Failed</h2>
+        <p class="text-gray-400 mb-6">
+            Something went wrong during the research pipeline. Check the agent log above for details.
+        </p>
+        <a href="/" class="inline-flex items-center gap-2 px-6 py-3 rounded-xl glass-card text-white font-medium hover:bg-white/10 transition-all">
+            <i data-lucide="arrow-left" class="w-4 h-4"></i>
+            Try Another Search
+        </a>
+    </div>
+    
+    <!-- ---- Stopped notice (V2.2) ---- -->
+    <div x-show="status === 'stopped'" class="glass rounded-2xl p-8 text-center animate-slide-up border border-yellow-500/20">
+        <div class="w-16 h-16 rounded-2xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center mx-auto mb-4">
+            <i data-lucide="pause-circle" class="w-8 h-8 text-yellow-400"></i>
+        </div>
+        <h2 class="text-2xl font-bold text-white mb-2">Research Stopped</h2>
+        <p class="text-gray-400 mb-6">
+            Research was stopped. Partial vendor data may be available from the agents that completed before stopping.
+        </p>
+        <div class="flex justify-center gap-4">
+            <a href="/" class="inline-flex items-center gap-2 px-6 py-3 rounded-xl glass-card text-white font-medium hover:bg-white/10 transition-all">
+                <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                Back to Home
+            </a>
+        </div>
+    </div>
+    
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    /**
+     * Alpine.js component for real-time research tracking.
+     * 
+     * Connects to the SSE endpoint and renders agent updates
+     * as they come in. Manages agent status cards and progress bar.
+     */
+    function researchTracker(jobId) {
+        return {
+            jobId: jobId,
+            job: null,
+            status: 'queued',
+            events: [],
+            startTime: Date.now(),
+            elapsedTime: '00:00',
+            timerInterval: null,
+            vendorsFound: 0,
+            totalFindings: 0,
+            eventSource: null,
+            fastForwarding: false,   // V2.2: true after user clicks fast-forward
+            stopping: false,         // V2.2: true after user clicks stop
+            
+            // Agent status tracking for the sidebar cards
+            agentStatuses: {},
+            
+            // Ordered list of all 10 agents for display (V2.0)
+            get agentList() {
+                const agents = [
+                    { id: 'orchestrator', label: 'Orchestrator', role: 'Query Parser', icon: '🎯', bgClass: 'bg-blue-500/10' },
+                    { id: 'research', label: 'Research', role: 'Vendor Discovery', icon: '🔍', bgClass: 'bg-green-500/10' },
+                    { id: 'compliance', label: 'Compliance', role: 'Cert Verification', icon: '📋', bgClass: 'bg-yellow-500/10' },
+                    { id: 'financial', label: 'Financial', role: 'Health Assessment', icon: '💰', bgClass: 'bg-emerald-500/10' },
+                    { id: 'risk', label: 'Risk', role: 'Risk Analysis', icon: '⚠️', bgClass: 'bg-red-500/10' },
+                    { id: 'authenticity', label: 'Authenticity', role: 'Legitimacy Check', icon: '🛡️', bgClass: 'bg-cyan-500/10' },
+                    { id: 'price_comparison', label: 'Price', role: 'Price Comparison', icon: '💲', bgClass: 'bg-amber-500/10' },
+                    { id: 'specification', label: 'Specification', role: 'Spec Extraction', icon: '📐', bgClass: 'bg-violet-500/10' },
+                    { id: 'analysis', label: 'Analysis', role: 'MCDA Scoring', icon: '📊', bgClass: 'bg-amber-500/10' },
+                    { id: 'report', label: 'Report', role: 'Report Generation', icon: '📄', bgClass: 'bg-purple-500/10' },
+                ];
+                
+                return agents.map(a => ({
+                    ...a,
+                    status: this.agentStatuses[a.id] || 'waiting'
+                }));
+            },
+            
+            // Calculate progress as percentage based on completed agents (V2.0: 10 agents)
+            get progressPercent() {
+                const weights = {
+                    orchestrator: 5,
+                    research: 20,
+                    compliance: 10,
+                    financial: 10,
+                    risk: 10,
+                    authenticity: 10,
+                    price_comparison: 10,
+                    specification: 10,
+                    analysis: 8,
+                    report: 7,
+                };
+                
+                let progress = 0;
+                for (const [agent, weight] of Object.entries(weights)) {
+                    if (this.agentStatuses[agent] === 'completed') {
+                        progress += weight;
+                    } else if (this.agentStatuses[agent] === 'running') {
+                        progress += weight * 0.5;  // Half credit for running
+                    } else if (this.agentStatuses[agent] === 'skipped') {
+                        progress += weight;  // V2.2: Skipped = done for progress tracking
+                    }
+                }
+                
+                return Math.min(Math.round(progress), 100);
+            },
+            
+            get statusLabel() {
+                const labels = {
+                    queued: 'Starting Research Pipeline...',
+                    running: 'Research In Progress',
+                    completed: 'Research Complete',
+                    failed: 'Research Failed',
+                    stopped: 'Research Stopped'
+                };
+                return labels[this.status] || 'Unknown';
+            },
+            
+            // V2.2: Pipeline stage status for the progress bar indicators
+            get pipelineStages() {
+                const stages = [
+                    { id: 'orchestrator', label: 'Orchestrator', agents: ['orchestrator'] },
+                    { id: 'research', label: 'Research', agents: ['research'] },
+                    { id: 'core_assessment', label: 'Core Assessment', agents: ['compliance', 'financial', 'risk'] },
+                    { id: 'extended_assessment', label: 'Extended Assessment', agents: ['authenticity', 'price_comparison', 'specification'] },
+                    { id: 'analysis', label: 'Analysis', agents: ['analysis'] },
+                    { id: 'report', label: 'Report', agents: ['report'] },
+                ];
+                
+                return stages.map(stage => {
+                    const statuses = stage.agents.map(a => this.agentStatuses[a] || 'waiting');
+                    let stageStatus;
+                    if (statuses.includes('running')) stageStatus = 'running';
+                    else if (statuses.every(s => s === 'completed')) stageStatus = 'completed';
+                    else if (statuses.every(s => s === 'skipped')) stageStatus = 'skipped';
+                    else if (statuses.some(s => s === 'completed' || s === 'skipped')) {
+                        stageStatus = statuses.some(s => s === 'skipped') ? 'skipped' : 'completed';
+                    }
+                    else if (statuses.includes('failed')) stageStatus = 'failed';
+                    else stageStatus = 'waiting';
+                    return { ...stage, status: stageStatus };
+                });
+            },
+            
+            init() {
+                this.rememberCurrentJob();
+
+                // Start elapsed time timer
+                this.timerInterval = setInterval(() => {
+                    const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
+                    const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
+                    const secs = (elapsed % 60).toString().padStart(2, '0');
+                    this.elapsedTime = `${mins}:${secs}`;
+                }, 1000);
+                
+                // Fetch initial job data
+                this.fetchJob();
+                
+                // Connect to SSE stream
+                this.connectSSE();
+            },
+
+            rememberCurrentJob() {
+                try {
+                    localStorage.setItem('vendorscout:lastJobId', this.jobId);
+                } catch {
+                    // Ignore localStorage failures in restricted browser modes.
+                }
+            },
+            
+            async fetchJob() {
+                try {
+                    const resp = await fetch(`/api/jobs/${this.jobId}`);
+                    if (resp.ok) {
+                        this.job = await resp.json();
+                        this.status = this.job.status || 'queued';
+                    } else if (resp.status === 404) {
+                        // Unknown/stale job — stop the infinite spinner with an honest state.
+                        this.status = 'notfound';
+                        if (this.eventSource) { try { this.eventSource.close(); } catch {} }
+                    }
+                } catch (e) {
+                    console.error('Failed to fetch job:', e);
+                }
+            },
+            
+            connectSSE() {
+                this.eventSource = new EventSource(`/api/jobs/${this.jobId}/stream`);
+                
+                // Default message handler (data-only events)
+                this.eventSource.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        this.handleEvent(data);
+                    } catch (e) {
+                        console.error('Failed to parse SSE event:', e);
+                    }
+                };
+                
+                // Named event handlers for completion/failure
+                this.eventSource.addEventListener('completed', (event) => {
+                    this.status = 'completed';
+                    this.cleanup();
+                });
+                
+                this.eventSource.addEventListener('failed', (event) => {
+                    this.status = 'failed';
+                    this.cleanup();
+                });
+                
+                // V2.2: Handle stopped event
+                this.eventSource.addEventListener('stopped', (event) => {
+                    this.status = 'stopped';
+                    this.cleanup();
+                });
+                
+                this.eventSource.addEventListener('timeout', () => {
+                    this.cleanup();
+                });
+                
+                this.eventSource.onerror = () => {
+                    // SSE connection lost — re-check job status, but stop once
+                    // the job is unknown or finished (no infinite spinner).
+                    if (['notfound', 'completed', 'failed', 'stopped'].includes(this.status)) {
+                        try { this.eventSource.close(); } catch {}
+                        return;
+                    }
+                    setTimeout(() => this.fetchJob(), 2000);
+                };
+            },
+            
+            handleEvent(data) {
+                // Add to events timeline
+                this.events.push(data);
+                
+                // Update agent status
+                if (data.agent && data.agent !== 'system') {
+                    this.agentStatuses[data.agent] = data.status;
+                }
+                
+                // Update status
+                if (data.job_status) {
+                    this.status = data.job_status;
+                } else if (this.status === 'queued') {
+                    this.status = 'running';
+                }
+
+                this.rememberCurrentJob();
+                
+                // Track findings
+                if (data.findings_count > 0) {
+                    this.totalFindings += data.findings_count;
+                    
+                    // Update vendor count from research agent
+                    if (data.agent === 'research' && data.status === 'completed') {
+                        this.vendorsFound = data.findings_count;
+                    }
+                }
+                
+                // Re-initialize Lucide icons for new elements
+                this.$nextTick(() => lucide.createIcons());
+            },
+            
+            cleanup() {
+                if (this.eventSource) {
+                    this.eventSource.close();
+                    this.eventSource = null;
+                }
+                if (this.timerInterval) {
+                    clearInterval(this.timerInterval);
+                }
+            },
+            
+            // ---- V2.2: Pipeline control methods ----
+            
+            async stopResearch() {
+                if (!confirm('Stop this research? No final report will be generated, but partial vendor data will be preserved.')) return;
+                this.stopping = true;
+                try {
+                    await fetch(`/api/jobs/${this.jobId}/stop`, { method: 'POST' });
+                } catch(e) {
+                    console.error('Failed to send stop signal:', e);
+                    this.stopping = false;
+                }
+            },
+            
+            async fastForward() {
+                this.fastForwarding = true;
+                try {
+                    await fetch(`/api/jobs/${this.jobId}/fast-forward`, { method: 'POST' });
+                } catch(e) {
+                    console.error('Failed to send fast-forward signal:', e);
+                    this.fastForwarding = false;
+                }
+            },
+            
+            async skipAgent(agentName) {
+                try {
+                    await fetch(`/api/jobs/${this.jobId}/skip-agent/${agentName}`, { method: 'POST' });
+                } catch(e) {
+                    console.error('Failed to skip agent:', e);
+                }
+            },
+            
+            async skipStage(stageId) {
+                const stageAgents = {
+                    orchestrator: ['orchestrator'],
+                    research: ['research'],
+                    core_assessment: ['compliance', 'financial', 'risk'],
+                    extended_assessment: ['authenticity', 'price_comparison', 'specification'],
+                    analysis: ['analysis'],
+                    report: ['report'],
+                };
+                const agents = stageAgents[stageId] || [];
+                for (const agent of agents) {
+                    const agentStatus = this.agentStatuses[agent] || 'waiting';
+                    if (agentStatus === 'running' || agentStatus === 'waiting') {
+                        await fetch(`/api/jobs/${this.jobId}/skip-agent/${agent}`, { method: 'POST' });
+                    }
+                }
+            },
+            
+            agentLabel(name) {
+                const labels = {
+                    orchestrator: '🎯 Orchestrator',
+                    research: '🔍 Research',
+                    compliance: '📋 Compliance',
+                    financial: '💰 Financial',
+                    risk: '⚠️ Risk',
+                    authenticity: '🛡️ Authenticity',
+                    price_comparison: '💲 Price',
+                    specification: '📐 Specification',
+                    analysis: '📊 Analysis',
+                    report: '📄 Report',
+                    system: '⚙️ System'
+                };
+                return labels[name] || name;
+            },
+            
+            formatTime(timestamp) {
+                if (!timestamp) return '';
+                try {
+                    return new Date(timestamp).toLocaleTimeString();
+                } catch {
+                    return timestamp;
+                }
+            }
+        };
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv*/
+*.egg-info/
+.pytest_cache/
+
+# Env / secrets
+.env
+*.env
+!.env.example
+.secrets/
+
+# Data / DB
+data/
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+
+# Playwright / browser
+.playwright/
+playwright-report/
+test-results/
+screenshots/
+*.png
+!docs/**/*.png
+!frontend/**/*.png
+
+# Node (if any sidecar)
+node_modules/
+
+# Logs / tmp
+*.log
+tmp/
+.DS_Store
+
+# Build artifacts (keep planning decks though)
+*.mp4
+!docs/decks/*.pdf
+
+# Internal planning/strategy docs — kept local, not published
+docs/

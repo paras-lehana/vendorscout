@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Evaluating Vendors — VendorScout</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body{background:radial-gradient(1100px 500px at 75% -10%,#1e293b 0%,#0b1120 55%,#060912 100%)}
+    .glass{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}
+    .grad{background:linear-gradient(90deg,#818cf8,#22d3ee,#34d399);-webkit-background-clip:text;background-clip:text;color:transparent}
+    /* logo marquee */
+    .marquee{overflow:hidden;mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
+    .marquee-track{display:flex;gap:3rem;width:max-content;animation:scroll 22s linear infinite}
+    @keyframes scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+    .node{position:relative}
+    .node:not(:last-child)::after{content:"";position:absolute;top:50%;right:-1.6rem;width:1.6rem;height:2px;background:linear-gradient(90deg,#475569,#22d3ee)}
+  </style>
+</head>
+<body class="text-slate-200 min-h-screen">
+  <header class="flex items-center gap-3 px-5 py-4 border-b border-white/10">
+    <a href="/" class="text-sm text-slate-400 hover:text-cyan-300">← Back to sourcing</a>
+    <div class="ml-auto font-bold grad text-lg">VendorScout</div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-5 py-10 space-y-16">
+
+    <!-- intro -->
+    <section class="text-center">
+      <h1 class="text-3xl md:text-4xl font-bold grad mb-3">Everything you need to know about evaluating a vendor</h1>
+      <p class="text-slate-400 max-w-2xl mx-auto">Sourcing a supplier isn't just "find a cheap quote." A good evaluation weighs nine dimensions — exactly what VendorScout's agent scores for you, automatically, from live marketplace data.</p>
+    </section>
+
+    <!-- 9 dimensions -->
+    <section>
+      <h2 class="text-xl font-semibold text-slate-100 mb-5">The 9 dimensions of a solid vendor decision</h2>
+      <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <template id="dims"></template>
+        <div class="glass rounded-2xl p-4"><div class="text-cyan-300 font-semibold">1 · Relevance</div><p class="text-sm text-slate-400 mt-1">Does the product actually match your spec, quantity and use-case?</p></div>
+        <div class="glass rounded-2xl p-4"><div class="text-cyan-300 font-semibold">2 · Compliance</div><p class="text-sm text-slate-400 mt-1">ISO / CE / industry certifications — claimed vs verifiable.</p></div>
+        <div class="glass rounded-2xl p-4"><div class="text-cyan-300 font-semibold">3 · Financial health</div><p class="text-sm text-slate-400 mt-1">Will they still be around to fulfil a bulk order?</p></div>
+        <div class="glass rounded-2xl p-4"><div class="text-cyan-300 font-semibold">4 · Risk</div><p class="text-sm text-slate-400 mt-1">Negative news, disputes, supply-chain red flags.</p></div>
+        <div class="glass rounded-2xl p-4"><div class="text-cyan-300 font-semibold">5 · Authenticity</div><p class="text-sm text-slate-400 mt-1">BIS/ISI, GST/registration, TrustSEAL — is the seller real?</p></div>
+        <div class="glass rounded-2xl p-4"><div class="text-cyan-300 font-semibold">6 · Reputation</div><p class="text-sm text-slate-400 mt-1">Reviews, ratings, years in business, repeat buyers.</p></div>
+        <div class="glass rounded-2xl p-4"><div class="text-cyan-300 font-semibold">7 · Capability</div><p class="text-sm text-slate-400 mt-1">Capacity & lead time for YOUR volume (e.g. 12 units, bulk).</p></div>
+        <div class="glass rounded-2xl p-4"><div class="text-cyan-300 font-semibold">8 · Price</div><p class="text-sm text-slate-400 mt-1">Quote vs the market index — competitive, average or premium.</p></div>
+        <div class="glass rounded-2xl p-4"><div class="text-cyan-300 font-semibold">9 · Specification</div><p class="text-sm text-slate-400 mt-1">Completeness of technical detail — fewer surprises later.</p></div>
+      </div>
+    </section>
+
+    <!-- how the agent works — n8n-style flow -->
+    <section>
+      <h2 class="text-xl font-semibold text-slate-100 mb-1">How the VendorScout agent works</h2>
+      <p class="text-sm text-slate-400 mb-6">An autonomous pipeline — plan, browse, extract, vet, score, act — each node does one job:</p>
+      <div class="overflow-x-auto pb-2">
+        <div class="flex items-stretch gap-10 min-w-max px-2">
+          <div class="node glass rounded-xl p-3 w-40"><div class="text-lg">🧭</div><div class="font-semibold text-slate-100 text-sm">Plan</div><div class="text-xs text-slate-400">parse need into a query</div></div>
+          <div class="node glass rounded-xl p-3 w-40"><div class="text-lg">🌐</div><div class="font-semibold text-slate-100 text-sm">Scout</div><div class="text-xs text-slate-400">browse live marketplace</div></div>
+          <div class="node glass rounded-xl p-3 w-40"><div class="text-lg">📋</div><div class="font-semibold text-slate-100 text-sm">Extract</div><div class="text-xs text-slate-400">pull real suppliers + prices</div></div>
+          <div class="node glass rounded-xl p-3 w-40"><div class="text-lg">🛡️</div><div class="font-semibold text-slate-100 text-sm">Vet</div><div class="text-xs text-slate-400">certs, risk, authenticity</div></div>
+          <div class="node glass rounded-xl p-3 w-40"><div class="text-lg">📊</div><div class="font-semibold text-slate-100 text-sm">Score</div><div class="text-xs text-slate-400">rank by 9-dim MCDA</div></div>
+          <div class="node glass rounded-xl p-3 w-40"><div class="text-lg">🤝</div><div class="font-semibold text-slate-100 text-sm">Act</div><div class="text-xs text-slate-400">send RFQ enquiry</div></div>
+          <div class="node glass rounded-xl p-3 w-40"><div class="text-lg">📑</div><div class="font-semibold text-slate-100 text-sm">Report</div><div class="text-xs text-slate-400">ranked recommendation</div></div>
+        </div>
+      </div>
+      <p class="text-xs text-slate-500 mt-4">…and if a page changes or a step fails, the agent <span class="text-amber-300">recovers</span> — re-reads the page and re-plans, instead of crashing.</p>
+    </section>
+
+    <!-- tech stack logo marquee -->
+    <section>
+      <h2 class="text-xl font-semibold text-slate-100 mb-1">Built on the Microsoft AI stack</h2>
+      <p class="text-sm text-slate-400 mb-5">Azure OpenAI for reasoning + Microsoft's Playwright for the browser — plus a fast, open toolchain.</p>
+      <div class="marquee glass rounded-2xl py-6">
+        <div class="marquee-track">
+          <template id="logos"></template>
+          <!-- duplicated track for seamless loop -->
+          <span class="flex items-center gap-3"><img src="https://cdn.simpleicons.org/microsoftazure/38bdf8" class="w-8 h-8" alt="Azure"><span class="text-slate-300">Azure OpenAI</span></span>
+          <span class="flex items-center gap-3"><img src="https://cdn.simpleicons.org/playwright/45ba4b" class="w-8 h-8" alt="Playwright"><span class="text-slate-300">Playwright</span></span>
+          <span class="flex items-center gap-3"><img src="https://cdn.simpleicons.org/python/ffd43b" class="w-8 h-8" alt="Python"><span class="text-slate-300">Python 3.11</span></span>
+          <span class="flex items-center gap-3"><img src="https://cdn.simpleicons.org/fastapi/05998b" class="w-8 h-8" alt="FastAPI"><span class="text-slate-300">FastAPI</span></span>
+          <span class="flex items-center gap-3"><img src="https://cdn.simpleicons.org/docker/2496ed" class="w-8 h-8" alt="Docker"><span class="text-slate-300">Docker</span></span>
+          <span class="flex items-center gap-3"><img src="https://cdn.simpleicons.org/githubcopilot/ffffff" class="w-8 h-8" alt="Copilot"><span class="text-slate-300">GitHub Copilot</span></span>
+          <span class="flex items-center gap-3"><img src="https://cdn.simpleicons.org/tailwindcss/38bdf8" class="w-8 h-8" alt="Tailwind"><span class="text-slate-300">Tailwind</span></span>
+          <!-- repeat -->
+          <span class="flex items-center gap-3"><img src="https://cdn.simpleicons.org/microsoftazure/38bdf8" class="w-8 h-8" alt="Azure"><span class="text-slate-300">Azure OpenAI</span></span>
+          <span class="flex items-center gap-3"><img src="https://cdn.simpleicons.org/playwright/45ba4b" class="w-8 h-8" alt="Playwright"><span class="text-slate-300">Playwright</span></span>
+          <span class="flex items-center gap-3"><img src="https://cdn.simpleicons.org/python/ffd43b" class="w-8 h-8" alt="Python"><span class="text-slate-300">Python 3.11</span></span>
+          <span class="flex items-center gap-3"><img src="https://cdn.simpleicons.org/fastapi/05998b" class="w-8 h-8" alt="FastAPI"><span class="text-slate-300">FastAPI</span></span>
+          <span class="flex items-center gap-3"><img src="https://cdn.simpleicons.org/docker/2496ed" class="w-8 h-8" alt="Docker"><span class="text-slate-300">Docker</span></span>
+          <span class="flex items-center gap-3"><img src="https://cdn.simpleicons.org/githubcopilot/ffffff" class="w-8 h-8" alt="Copilot"><span class="text-slate-300">GitHub Copilot</span></span>
+          <span class="flex items-center gap-3"><img src="https://cdn.simpleicons.org/tailwindcss/38bdf8" class="w-8 h-8" alt="Tailwind"><span class="text-slate-300">Tailwind</span></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="text-center pb-10">
+      <a href="/" class="inline-block px-6 py-3 rounded-xl font-semibold text-slate-900 bg-gradient-to-r from-indigo-400 via-cyan-400 to-emerald-400">Start sourcing →</a>
+    </section>
+  </main>
+</body>
+</html>

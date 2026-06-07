@@ -1,0 +1,753 @@
+{% extends "base.html" %}
+
+{% block title %}{{ app_name }} - AI-Powered Vendor Research{% endblock %}
+
+{% block content %}
+<div x-data="searchApp()" x-init="init()" class="space-y-16">
+    
+    <!-- ======== HERO SECTION ======== -->
+    <section class="text-center pt-16 pb-4 relative">
+        <!-- Floating decorative orbs -->
+        <div class="absolute top-10 left-1/4 w-72 h-72 bg-brand-500/10 rounded-full blur-3xl animate-float pointer-events-none"></div>
+        <div class="absolute top-20 right-1/4 w-56 h-56 bg-purple-500/10 rounded-full blur-3xl animate-float-delay pointer-events-none"></div>
+        
+        <div class="relative z-10">
+            <div class="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-300 text-sm mb-8 animate-fade-in">
+                <i data-lucide="sparkles" class="w-4 h-4"></i>
+                <span>10 AI Agents · 9 Scoring Dimensions · Real-Time Research</span>
+            </div>
+            
+            <h1 class="text-5xl md:text-7xl font-extrabold text-white mb-6 leading-tight animate-slide-up">
+                Find Your Perfect<br>
+                <span class="gradient-text-animated">
+                    Vendor Partner
+                </span>
+            </h1>
+            
+            <p class="text-xl text-gray-400 max-w-2xl mx-auto mb-3 animate-slide-up-delay-1">
+                An autonomous web agent that browses real marketplaces, verifies &amp; ranks vendors,
+                and sends RFQs on your behalf — watch every click, live.
+            </p>
+
+            <div class="flex items-center justify-center gap-3 mb-4 animate-slide-up-delay-2 flex-wrap">
+                <a
+                    href="/theater"
+                    class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-indigo-400 via-cyan-400 to-emerald-400 text-slate-900 font-semibold hover:opacity-90 transition-all shadow-lg shadow-cyan-500/20"
+                >
+                    <i data-lucide="bot" class="w-4 h-4"></i>
+                    Live Browser Theater — watch the agent work
+                </a>
+                <a
+                    href="/demo"
+                    class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold hover:from-red-600 hover:to-red-700 transition-all shadow-lg shadow-red-500/20"
+                >
+                    <i data-lucide="play-circle" class="w-4 h-4"></i>
+                    Watch Demo
+                </a>
+                <a
+                    href="#search-start"
+                    class="inline-flex items-center gap-2 px-5 py-3 rounded-xl glass-card text-white font-semibold hover:bg-white/10 transition-all"
+                >
+                    <i data-lucide="search" class="w-4 h-4"></i>
+                    Start Research
+                </a>
+            </div>
+            
+            <div class="flex items-center justify-center gap-6 text-sm text-gray-500 animate-slide-up-delay-2">
+                <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-green-400"></span> Authenticity Verified</span>
+                <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-blue-400"></span> Price Compared</span>
+                <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-purple-400"></span> Specs Analyzed</span>
+            </div>
+        </div>
+    </section>
+    
+    <!-- ======== SEARCH MODE TABS + SEARCH BAR ======== -->
+    <section id="search-start" class="max-w-3xl mx-auto animate-slide-up-delay-3">
+        
+        <!-- Mode Tabs -->
+        <div class="flex flex-wrap items-center justify-center gap-2 mb-4">
+            <template x-for="mode in searchModes" :key="mode.id">
+                <button 
+                    @click="activeMode = mode.id"
+                    class="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all cursor-pointer"
+                    :class="activeMode === mode.id 
+                        ? 'tab-active shadow-lg shadow-brand-500/10' 
+                        : 'glass-card text-gray-400 hover:text-white border-transparent'"
+                >
+                    <span x-text="mode.icon"></span>
+                    <span x-text="mode.label"></span>
+                </button>
+            </template>
+        </div>
+        
+        <!-- Tab Description -->
+        <p class="text-center text-xs text-gray-500 mb-4" x-text="searchModes.find(m => m.id === activeMode)?.description"></p>
+        
+        <!-- Search Form -->
+        <form @submit.prevent="submitSearch()" class="relative">
+            <div class="glass rounded-2xl p-2 animate-glow">
+                <div class="flex flex-wrap sm:flex-nowrap items-center gap-3">
+                    <div class="pl-4 hidden sm:block">
+                        <i data-lucide="search" class="w-5 h-5 text-gray-400"></i>
+                    </div>
+
+                    <input
+                        x-model="query"
+                        type="text"
+                        :placeholder="searchModes.find(m => m.id === activeMode)?.placeholder"
+                        class="flex-1 min-w-0 w-full sm:w-auto bg-transparent text-white placeholder-gray-500 text-lg py-4 px-2 outline-none"
+                        :disabled="isLoading"
+                        autofocus
+                    >
+                    
+                    <!-- Detail level selector -->
+                    <select
+                        x-model="detailLevel"
+                        :disabled="isLoading"
+                        class="bg-gray-800/80 text-gray-300 text-sm rounded-lg px-3 py-2 border border-gray-600/50 outline-none
+                               hover:border-brand-500/50 focus:border-brand-500 transition-colors cursor-pointer"
+                        title="Research depth: Low=fast (5 vendors), Medium=balanced (8), High=thorough (12)"
+                    >
+                        <option value="low">⚡ Quick</option>
+                        <option value="medium" selected>⚖️ Balanced</option>
+                        <option value="high">🔬 Deep</option>
+                    </select>
+                    
+                    <button 
+                        type="submit"
+                        :disabled="!query.trim() || isLoading"
+                        class="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-brand-500 to-purple-600 text-white font-semibold
+                               hover:from-brand-600 hover:to-purple-700 disabled:opacity-40 disabled:cursor-not-allowed
+                               transition-all shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40"
+                    >
+                        <template x-if="!isLoading">
+                            <span class="flex items-center gap-2">
+                                <i data-lucide="rocket" class="w-4 h-4"></i>
+                                Research
+                            </span>
+                        </template>
+                        <template x-if="isLoading">
+                            <span class="flex items-center gap-2">
+                                <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                </svg>
+                                Starting...
+                            </span>
+                        </template>
+                    </button>
+                </div>
+            </div>
+            
+            <div x-show="error" x-text="error" class="mt-3 text-red-400 text-sm text-center"></div>
+        </form>
+
+        <!-- Resume current progress / recent reports -->
+        <div class="mt-5" x-show="jobsLoaded && (resumableJobs.length > 0 || recentCompletedJobs.length > 0)">
+            <div class="glass rounded-2xl p-5 space-y-4">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                    <div>
+                        <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+                            <i data-lucide="history" class="w-4 h-4 text-brand-400"></i>
+                            Continue Current Progress
+                        </h3>
+                        <p class="text-xs text-gray-500 mt-1">
+                            Active research jobs and recent reports are remembered automatically.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        @click="fetchResumableJobs()"
+                        class="self-start md:self-auto px-3 py-1.5 rounded-lg glass-card text-xs text-gray-300 hover:text-white transition-all"
+                    >
+                        Refresh Jobs
+                    </button>
+                </div>
+
+                <div class="space-y-3" x-show="resumableJobs.length > 0">
+                    <p class="text-xs uppercase tracking-[0.2em] text-gray-500">Active Jobs</p>
+                    <template x-for="job in resumableJobs" :key="job.id">
+                        <div class="glass-card rounded-xl p-4">
+                            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                                <div class="min-w-0">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <span
+                                            class="px-2 py-0.5 rounded-full text-[11px] font-medium"
+                                            :class="{
+                                                'bg-blue-500/10 text-blue-400': job.status === 'running',
+                                                'bg-yellow-500/10 text-yellow-400': job.status === 'queued'
+                                            }"
+                                            x-text="job.status === 'running' ? 'RUNNING' : 'QUEUED'"
+                                        ></span>
+                                        <span class="text-xs text-gray-500" x-text="formatCreatedAt(job.created_at)"></span>
+                                    </div>
+                                    <p class="text-sm text-white truncate" x-text="shortQuery(job.query)"></p>
+                                    <p class="text-xs text-gray-500 mt-1">
+                                        Open the live tracker to continue following agent activity.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    @click="continueJob(job.id)"
+                                    class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-brand-500 to-purple-600 text-white text-sm font-semibold hover:from-brand-600 hover:to-purple-700 transition-all shadow-lg shadow-brand-500/20"
+                                >
+                                    <i data-lucide="play-circle" class="w-4 h-4"></i>
+                                    Continue Tracking
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <div class="space-y-3" x-show="recentCompletedJobs.length > 0">
+                    <p class="text-xs uppercase tracking-[0.2em] text-gray-500">Recent Completed Reports</p>
+                    <template x-for="job in recentCompletedJobs" :key="job.id">
+                        <div class="glass-card rounded-xl p-4">
+                            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                                <div class="min-w-0">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-500/10 text-green-400">COMPLETED</span>
+                                        <span class="text-xs text-gray-500" x-text="formatCreatedAt(job.completed_at || job.created_at)"></span>
+                                    </div>
+                                    <p class="text-sm text-white truncate" x-text="shortQuery(job.query)"></p>
+                                    <p class="text-xs text-gray-500 mt-1">
+                                        <span x-text="(job.total_vendors_verified || 0)"></span> vendors analyzed.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    @click="openReport(job.id)"
+                                    class="inline-flex items-center gap-2 px-4 py-2 rounded-xl glass-card text-white text-sm font-semibold hover:bg-white/10 transition-all"
+                                >
+                                    <i data-lucide="file-text" class="w-4 h-4"></i>
+                                    View Report
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Example Queries (mode-specific) -->
+        <div class="mt-4" x-show="!isLoading">
+            <p class="text-sm text-gray-500 text-center mb-3">Try these examples:</p>
+            <div class="flex flex-wrap justify-center gap-2">
+                <template x-for="example in currentExamples" :key="example">
+                    <button 
+                        @click="query = example"
+                        class="px-4 py-2 rounded-full glass-card text-sm text-gray-300 hover:text-white cursor-pointer transition-all"
+                        x-text="example"
+                    ></button>
+                </template>
+            </div>
+        </div>
+    </section>
+    
+    <!-- ======== KEY STATS BAR ======== -->
+    <section class="max-w-4xl mx-auto">
+        <div class="glass rounded-2xl p-6">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+                <div>
+                    <div class="text-3xl font-bold text-white counter-value">10</div>
+                    <div class="text-xs text-gray-500 mt-1">AI Agents</div>
+                </div>
+                <div>
+                    <div class="text-3xl font-bold gradient-text counter-value">9</div>
+                    <div class="text-xs text-gray-500 mt-1">Scoring Dimensions</div>
+                </div>
+                <div>
+                    <div class="text-3xl font-bold text-cyber-blue counter-value">50+</div>
+                    <div class="text-xs text-gray-500 mt-1">Data Points per Vendor</div>
+                </div>
+                <div>
+                    <div class="text-3xl font-bold text-cyber-green counter-value">100%</div>
+                    <div class="text-xs text-gray-500 mt-1">Autonomous</div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- ======== FEATURES BENTO GRID ======== -->
+    <section class="max-w-6xl mx-auto">
+        <div class="text-center mb-10">
+            <h2 class="text-3xl font-bold text-white mb-3">
+                Everything You Need to Evaluate Vendors
+            </h2>
+            <p class="text-gray-400 max-w-xl mx-auto">
+                10 specialized AI agents work together, each handling a critical aspect of vendor intelligence.
+            </p>
+        </div>
+        
+        <div class="bento-grid">
+            <!-- LARGE: Master Research -->
+            <div class="bento-large glass-card rounded-2xl p-8 flex flex-col justify-between group">
+                <div>
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
+                            <span class="text-xl">🎯</span>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-bold text-white">Master Research Pipeline</h3>
+                            <span class="text-xs text-brand-300">Orchestrator + Research Agents</span>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-400 leading-relaxed">
+                        Our AI orchestrator parses your natural language query into structured requirements, 
+                        then deploys research agents to discover vendors across the web using search APIs 
+                        and live navigation with our self-hosted Playwright browser agent.
+                    </p>
+                </div>
+                <div class="flex items-center gap-2 mt-6">
+                    <span class="px-2 py-1 text-xs rounded-md bg-blue-500/10 text-blue-300">Query Parsing</span>
+                    <span class="px-2 py-1 text-xs rounded-md bg-green-500/10 text-green-300">Web Discovery</span>
+                    <span class="px-2 py-1 text-xs rounded-md bg-purple-500/10 text-purple-300">Deep Scraping</span>
+                </div>
+            </div>
+            
+            <!-- Compliance -->
+            <div class="glass-card rounded-2xl p-6 group">
+                <div class="w-10 h-10 rounded-lg bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center mb-3">
+                    <span class="text-lg">📋</span>
+                </div>
+                <h3 class="text-base font-bold text-white mb-2">Compliance Check</h3>
+                <p class="text-sm text-gray-400">
+                    Verifies ISO, SOC 2, GDPR, FDA, CMMI and other certifications against official databases.
+                </p>
+            </div>
+            
+            <!-- Financial -->
+            <div class="glass-card rounded-2xl p-6 group">
+                <div class="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-3">
+                    <span class="text-lg">💰</span>
+                </div>
+                <h3 class="text-base font-bold text-white mb-2">Financial Health</h3>
+                <p class="text-sm text-gray-400">
+                    Assesses revenue trends, funding history, profitability indicators and financial stability.
+                </p>
+            </div>
+            
+            <!-- Risk -->
+            <div class="glass-card rounded-2xl p-6 group">
+                <div class="w-10 h-10 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-3">
+                    <span class="text-lg">⚠️</span>
+                </div>
+                <h3 class="text-base font-bold text-white mb-2">Risk Analysis</h3>
+                <p class="text-sm text-gray-400">
+                    Identifies supply chain risks, legal issues, geographic dependencies and vendor lock-in concerns.
+                </p>
+            </div>
+            
+            <!-- NEW: Authenticity — wide card -->
+            <div class="bento-wide glass-card rounded-2xl p-6 relative overflow-hidden group">
+                <div class="absolute top-0 right-0 px-3 py-1 rounded-bl-xl bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border-b border-l border-cyan-500/20">
+                    <span class="text-xs font-semibold text-cyan-300">NEW in V2.0</span>
+                </div>
+                <div class="flex items-start gap-4">
+                    <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/20 flex items-center justify-center flex-shrink-0">
+                        <span class="text-xl">🛡️</span>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-bold text-white mb-2">Authenticity Verification</h3>
+                        <p class="text-sm text-gray-400">
+                            Cross-references company registration, domain age, social media presence, and business legitimacy 
+                            indicators to detect fraudulent or shell company vendors.
+                        </p>
+                        <div class="flex gap-2 mt-3">
+                            <span class="px-2 py-0.5 text-xs rounded bg-cyan-500/10 text-cyan-300">Domain WHOIS</span>
+                            <span class="px-2 py-0.5 text-xs rounded bg-blue-500/10 text-blue-300">Registration Check</span>
+                            <span class="px-2 py-0.5 text-xs rounded bg-indigo-500/10 text-indigo-300">Social Verification</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- NEW: Price Comparison -->
+            <div class="glass-card rounded-2xl p-6 relative overflow-hidden group">
+                <div class="absolute top-0 right-0 px-2 py-0.5 rounded-bl-lg bg-amber-500/20 border-b border-l border-amber-500/20">
+                    <span class="text-[10px] font-semibold text-amber-300">NEW</span>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-3">
+                    <span class="text-lg">💲</span>
+                </div>
+                <h3 class="text-base font-bold text-white mb-2">Price Comparison</h3>
+                <p class="text-sm text-gray-400">
+                    Extracts and normalizes pricing data across vendors, identifying market rates and value outliers.
+                </p>
+            </div>
+            
+            <!-- NEW: Specification Extraction -->
+            <div class="glass-card rounded-2xl p-6 relative overflow-hidden group">
+                <div class="absolute top-0 right-0 px-2 py-0.5 rounded-bl-lg bg-violet-500/20 border-b border-l border-violet-500/20">
+                    <span class="text-[10px] font-semibold text-violet-300">NEW</span>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center mb-3">
+                    <span class="text-lg">📐</span>
+                </div>
+                <h3 class="text-base font-bold text-white mb-2">Spec Extraction</h3>
+                <p class="text-sm text-gray-400">
+                    Builds a structured specification corpus from product pages, datasheets and technical documentation.
+                </p>
+            </div>
+            
+            <!-- WIDE: Analysis + Report -->
+            <div class="bento-wide glass-card rounded-2xl p-6 group">
+                <div class="flex items-start gap-6">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-3">
+                            <div class="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                                <span class="text-lg">📊</span>
+                            </div>
+                            <h3 class="text-base font-bold text-white">MCDA Scoring & Report</h3>
+                        </div>
+                        <p class="text-sm text-gray-400">
+                            Multi-Criteria Decision Analysis across 9 weighted dimensions produces a ranked shortlist with 
+                            executive summary, comparison matrix, and actionable recommendations.
+                        </p>
+                    </div>
+                    <div class="hidden md:flex flex-col gap-1.5 text-xs text-gray-500 flex-shrink-0 min-w-[140px]">
+                        <div class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-brand-400"></span> Relevance (20%)</div>
+                        <div class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-yellow-400"></span> Compliance (15%)</div>
+                        <div class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Financial (15%)</div>
+                        <div class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span> Authenticity (10%)</div>
+                        <div class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-red-400"></span> Risk (10%)</div>
+                        <div class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Price (8%)</div>
+                        <div class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span> Reputation (8%)</div>
+                        <div class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-violet-400"></span> Specification (7%)</div>
+                        <div class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span> Capability (7%)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- ======== PIPELINE VISUALIZATION ======== -->
+    <section class="max-w-5xl mx-auto">
+        <h2 class="text-xl font-bold text-white text-center mb-6">
+            10-Agent Pipeline Architecture
+        </h2>
+        
+        <div class="flex flex-wrap items-center justify-center gap-3">
+            <!-- Stage 1: Orchestrator -->
+            <div class="glass-card rounded-lg px-4 py-2.5 flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full bg-blue-400"></div>
+                <span class="text-sm text-gray-300 font-medium">🎯 Orchestrator</span>
+            </div>
+            <div class="pipeline-connector hidden md:block"></div>
+            
+            <!-- Stage 2: Research -->
+            <div class="glass-card rounded-lg px-4 py-2.5 flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full bg-green-400"></div>
+                <span class="text-sm text-gray-300 font-medium">🔍 Research</span>
+            </div>
+            <div class="pipeline-connector hidden md:block"></div>
+            
+            <!-- Stage 3: Parallel Group 1 (Compliance, Financial, Risk) -->
+            <div class="glass rounded-xl px-4 py-3 border-brand-500/20">
+                <div class="flex items-center gap-2 mb-1.5">
+                    <span class="text-xs text-brand-400 font-medium">⚡ Parallel Group 1</span>
+                </div>
+                <div class="flex gap-2">
+                    <span class="px-2 py-1 rounded bg-yellow-500/10 text-yellow-300 text-xs">📋 Compliance</span>
+                    <span class="px-2 py-1 rounded bg-emerald-500/10 text-emerald-300 text-xs">💰 Financial</span>
+                    <span class="px-2 py-1 rounded bg-red-500/10 text-red-300 text-xs">⚠️ Risk</span>
+                </div>
+            </div>
+            <div class="pipeline-connector hidden md:block"></div>
+            
+            <!-- Stage 4: Parallel Group 2 (Authenticity, Price, Specification) — NEW -->
+            <div class="glass rounded-xl px-4 py-3 border-cyan-500/20">
+                <div class="flex items-center gap-2 mb-1.5">
+                    <span class="text-xs text-cyan-400 font-medium">⚡ Parallel Group 2</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">V2.0</span>
+                </div>
+                <div class="flex gap-2">
+                    <span class="px-2 py-1 rounded bg-cyan-500/10 text-cyan-300 text-xs">🛡️ Authenticity</span>
+                    <span class="px-2 py-1 rounded bg-amber-500/10 text-amber-300 text-xs">💲 Price</span>
+                    <span class="px-2 py-1 rounded bg-violet-500/10 text-violet-300 text-xs">📐 Spec</span>
+                </div>
+            </div>
+            <div class="pipeline-connector hidden md:block"></div>
+            
+            <!-- Stage 5: Analysis -->
+            <div class="glass-card rounded-lg px-4 py-2.5 flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full bg-amber-400"></div>
+                <span class="text-sm text-gray-300 font-medium">📊 Analysis</span>
+            </div>
+            <div class="pipeline-connector hidden md:block"></div>
+            
+            <!-- Stage 6: Report -->
+            <div class="glass-card rounded-lg px-4 py-2.5 flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full bg-purple-400"></div>
+                <span class="text-sm text-gray-300 font-medium">📄 Report</span>
+            </div>
+        </div>
+    </section>
+    
+    <!-- ======== HOW IT WORKS ======== -->
+    <section class="max-w-5xl mx-auto">
+        <h2 class="text-2xl font-bold text-white text-center mb-8">
+            How It Works
+        </h2>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="glass-card rounded-2xl p-8 text-center group">
+                <div class="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mx-auto mb-5 group-hover:scale-110 transition-transform">
+                    <i data-lucide="message-square" class="w-7 h-7 text-blue-400"></i>
+                </div>
+                <div class="text-xs text-brand-400 font-semibold mb-2">STEP 1</div>
+                <h3 class="text-lg font-bold text-white mb-2">Describe Your Need</h3>
+                <p class="text-sm text-gray-400">
+                    Enter a natural language procurement query. Our AI parses requirements, 
+                    budget, certifications, and preferences.
+                </p>
+            </div>
+            
+            <div class="glass-card rounded-2xl p-8 text-center group">
+                <div class="w-14 h-14 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center mx-auto mb-5 group-hover:scale-110 transition-transform">
+                    <i data-lucide="bot" class="w-7 h-7 text-brand-400"></i>
+                </div>
+                <div class="text-xs text-brand-400 font-semibold mb-2">STEP 2</div>
+                <h3 class="text-lg font-bold text-white mb-2">10 Agents Investigate</h3>
+                <p class="text-sm text-gray-400">
+                    Specialized agents research vendors, verify compliance, assess finances, check 
+                    authenticity, compare prices, and extract specs — all in parallel.
+                </p>
+            </div>
+            
+            <div class="glass-card rounded-2xl p-8 text-center group">
+                <div class="w-14 h-14 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mx-auto mb-5 group-hover:scale-110 transition-transform">
+                    <i data-lucide="file-text" class="w-7 h-7 text-purple-400"></i>
+                </div>
+                <div class="text-xs text-brand-400 font-semibold mb-2">STEP 3</div>
+                <h3 class="text-lg font-bold text-white mb-2">Get Your Report</h3>
+                <p class="text-sm text-gray-400">
+                    Receive a comprehensive report with ranked vendors, 9-dimension comparison 
+                    matrix, risk assessment, and executive summary.
+                </p>
+            </div>
+        </div>
+    </section>
+    
+    <!-- ======== TECH STACK ======== -->
+    <section class="text-center pt-4 pb-8">
+        <div class="flex flex-wrap items-center justify-center gap-4 text-xs text-gray-500">
+            <span>Built with:</span>
+            <span class="px-3 py-1.5 rounded-lg glass-light">🎭 Playwright (Microsoft)</span>
+            <span class="px-3 py-1.5 rounded-lg glass-light">🤖 Azure OpenAI · gpt-4o</span>
+            <span class="px-3 py-1.5 rounded-lg glass-light">🔗 LangGraph multi-agent</span>
+            <span class="px-3 py-1.5 rounded-lg glass-light">⚡ FastAPI</span>
+            <span class="px-3 py-1.5 rounded-lg glass-light">🔍 SerperDev</span>
+            <span class="px-3 py-1.5 rounded-lg glass-light">📊 MCDA Scoring</span>
+        </div>
+    </section>
+    
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    /**
+     * Alpine.js component for the search page.
+     * Handles tabbed search modes, form submission, API call, and redirect.
+     * 
+     * V2.1: Added resume cards for active/completed jobs and promoted tested
+     * demo queries to the top of each mode-specific example list.
+     */
+    function searchApp() {
+        return {
+            query: '',
+            detailLevel: 'medium',
+            activeMode: 'master',
+            isLoading: false,
+            error: '',
+            jobsLoaded: false,
+            resumableJobs: [],
+            recentCompletedJobs: [],
+            
+            // Search mode definitions — each tab configures query context
+            searchModes: [
+                {
+                    id: 'master',
+                    label: 'Master',
+                    icon: '🎯',
+                    description: 'Full 10-agent pipeline — comprehensive vendor evaluation across all dimensions',
+                    placeholder: 'e.g., Industrial ball bearings supplier, ISO 9001 certified, budget under $50k...',
+                    prefix: ''
+                },
+                {
+                    id: 'authenticity',
+                    label: 'Authenticity',
+                    icon: '🛡️',
+                    description: 'Focus on verifying vendor legitimacy, business registration, and credibility',
+                    placeholder: 'e.g., Verify legitimacy of overseas electronics component suppliers...',
+                    prefix: '[FOCUS: Authenticity Verification] '
+                },
+                {
+                    id: 'price',
+                    label: 'Price',
+                    icon: '💲',
+                    description: 'Focus on pricing analysis, cost comparison, and budget optimization',
+                    placeholder: 'e.g., Compare pricing for bulk industrial fasteners from Asian suppliers...',
+                    prefix: '[FOCUS: Price Comparison] '
+                },
+                {
+                    id: 'specification',
+                    label: 'Specification',
+                    icon: '📐',
+                    description: 'Focus on technical specifications, product datasheets, and feature comparison',
+                    placeholder: 'e.g., Compare technical specs of enterprise SSD storage solutions...',
+                    prefix: '[FOCUS: Specification Analysis] '
+                }
+            ],
+            
+            // Mode-specific example queries
+            examplesByMode: {
+                master: [
+                    'CNC machining service provider for aerospace parts, AS9100 certified, India',
+                    'Find top industrial automation vendors in India with ISO certifications',
+                    'Industrial ball bearings supplier, ISO 9001 certified',
+                    'Cloud hosting provider with SOC 2, GDPR compliance',
+                    'Custom packaging manufacturer for food products, FDA approved',
+                ],
+                authenticity: [
+                    'Alibaba solar panel manufacturers claiming ISO 14001 certification',
+                    'Verify legitimacy of Alibaba electronics suppliers',
+                    'Check authenticity of pharmaceutical ingredient providers',
+                    'Validate overseas IT outsourcing companies for enterprise contracts',
+                ],
+                price: [
+                    'Industrial 3D printing services for metal prototyping, titanium and stainless steel',
+                    'Compare pricing for bulk stainless steel fasteners',
+                    'Find best value cloud hosting under $500/month',
+                    'Budget comparison for industrial 3D printing services',
+                ],
+                specification: [
+                    'Enterprise NVMe SSD storage solutions for data center deployment, 2TB+ capacity',
+                    'Compare specs of enterprise NVMe SSD solutions',
+                    'Technical comparison of industrial PLCs for automation',
+                    'Detailed spec analysis of CNC machining centers',
+                ]
+            },
+
+            init() {
+                this.fetchResumableJobs();
+            },
+            
+            get currentExamples() {
+                return this.examplesByMode[this.activeMode] || this.examplesByMode.master;
+            },
+
+            async fetchResumableJobs() {
+                try {
+                    const response = await fetch('/api/jobs?limit=12');
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch recent jobs');
+                    }
+
+                    const jobs = await response.json();
+                    const sortedJobs = this.prioritizeJobs(jobs || []);
+
+                    this.resumableJobs = sortedJobs
+                        .filter(job => job.status === 'queued' || job.status === 'running')
+                        .slice(0, 3);
+
+                    this.recentCompletedJobs = sortedJobs
+                        .filter(job => job.status === 'completed')
+                        .slice(0, 3);
+                } catch (err) {
+                    console.error('Failed to fetch resumable jobs:', err);
+                } finally {
+                    this.jobsLoaded = true;
+                    this.$nextTick(() => lucide.createIcons());
+                }
+            },
+
+            prioritizeJobs(jobs) {
+                let lastJobId = null;
+                try {
+                    lastJobId = localStorage.getItem('vendorscout:lastJobId');
+                } catch {
+                    lastJobId = null;
+                }
+
+                return [...jobs].sort((left, right) => {
+                    if (lastJobId && left.id === lastJobId) return -1;
+                    if (lastJobId && right.id === lastJobId) return 1;
+
+                    const leftDate = new Date(left.created_at || 0).getTime();
+                    const rightDate = new Date(right.created_at || 0).getTime();
+                    return rightDate - leftDate;
+                });
+            },
+
+            continueJob(jobId) {
+                this.rememberJob(jobId);
+                window.location.href = `/research/${jobId}`;
+            },
+
+            openReport(jobId) {
+                this.rememberJob(jobId);
+                window.location.href = `/report/${jobId}`;
+            },
+
+            rememberJob(jobId) {
+                try {
+                    localStorage.setItem('vendorscout:lastJobId', jobId);
+                } catch {
+                    // Ignore localStorage failures in private/incognito modes.
+                }
+            },
+
+            shortQuery(query, maxLength = 110) {
+                if (!query) return '';
+                return query.length > maxLength ? `${query.slice(0, maxLength - 1)}…` : query;
+            },
+
+            formatCreatedAt(value) {
+                if (!value) return 'Unknown time';
+                try {
+                    return new Date(value).toLocaleString();
+                } catch {
+                    return value;
+                }
+            },
+            
+            async submitSearch() {
+                if (!this.query.trim()) return;
+                
+                this.isLoading = true;
+                this.error = '';
+                
+                // Prepend mode-specific prefix to guide the AI pipeline
+                const mode = this.searchModes.find(m => m.id === this.activeMode);
+                const finalQuery = (mode?.prefix || '') + this.query.trim();
+                
+                try {
+                    const response = await fetch('/api/search', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            query: finalQuery,
+                            detail_level: this.detailLevel
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        const data = await response.json();
+                        throw new Error(data.detail || 'Search request failed');
+                    }
+                    
+                    const data = await response.json();
+                    this.rememberJob(data.job_id);
+                    window.location.href = `/research/${data.job_id}`;
+                    
+                } catch (err) {
+                    this.error = err.message || 'Failed to start research. Please try again.';
+                    this.isLoading = false;
+                }
+            }
+        };
+    }
+</script>
+{% endblock %}

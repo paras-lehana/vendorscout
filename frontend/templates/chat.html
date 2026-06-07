@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en" class="dark" style="overflow:hidden">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VendorScout — Agentic Web sourcing</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    html,body{height:100%;margin:0}
+    body{background:radial-gradient(1100px 500px at 75% -10%,#1e293b 0%,#0b1120 55%,#060912 100%);}
+    .glass{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}
+    .grad{background:linear-gradient(90deg,#818cf8,#22d3ee,#34d399);-webkit-background-clip:text;background-clip:text;color:transparent}
+    .scroll::-webkit-scrollbar{width:7px}.scroll::-webkit-scrollbar-thumb{background:#334155;border-radius:9px}
+    .chrome-dot{width:9px;height:9px;border-radius:9999px;display:inline-block}
+    .pulse{animation:p 1.4s infinite}@keyframes p{0%,100%{opacity:1}50%{opacity:.35}}
+    [x-cloak]{display:none!important}
+  </style>
+</head>
+<body class="text-slate-200">
+<div class="flex h-screen w-screen overflow-hidden" x-data="chat()" x-init="init()">
+
+  <!-- ============ SIDEBAR (sessions) ============ -->
+  <aside class="shrink-0 h-full border-r border-white/10 bg-slate-950/60 backdrop-blur flex flex-col transition-all duration-200 overflow-hidden"
+         :class="sidebarOpen ? 'w-72' : 'w-0'">
+    <div class="p-3 flex flex-col h-full" x-show="sidebarOpen">
+      <button @click="newChat()" class="w-full mb-3 py-2 rounded-lg font-semibold text-slate-900 bg-gradient-to-r from-indigo-400 via-cyan-400 to-emerald-400">+ New sourcing chat</button>
+      <div class="text-[11px] uppercase tracking-wide text-slate-500 px-1 mb-1">Your sessions</div>
+      <div class="flex-1 overflow-y-auto scroll space-y-1">
+        <template x-for="s in sessions" :key="s.id">
+          <button @click="loadSession(s.id)"
+                  class="w-full text-left px-3 py-2 rounded-lg text-sm truncate hover:bg-white/5"
+                  :class="s.id===currentId ? 'bg-white/10 text-white' : 'text-slate-300'">
+            <span x-text="s.title || 'New chat'"></span>
+          </button>
+        </template>
+        <div x-show="sessions.length===0" class="text-xs text-slate-500 px-1 mt-2">No past chats yet.</div>
+      </div>
+      <a href="/learn" class="mt-3 text-xs text-slate-400 hover:text-cyan-300 px-1">📚 How vendor evaluation works →</a>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <div class="flex-1 flex flex-col min-w-0 h-full">
+    <!-- top bar -->
+    <header class="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-white/10">
+      <button @click="sidebarOpen=!sidebarOpen" title="Toggle chats" class="p-2 rounded-lg hover:bg-white/10">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+      <div class="font-bold grad text-lg">VendorScout</div>
+      <span class="text-[11px] px-2 py-0.5 rounded-full glass text-slate-300">Agentic Web · Azure OpenAI · Playwright</span>
+      <div class="ml-auto flex items-center gap-3 text-sm">
+        <a href="/learn" class="text-slate-400 hover:text-cyan-300 hidden sm:block">Learn</a>
+        <a href="/theater" class="text-slate-400 hover:text-cyan-300 hidden sm:block">Theater</a>
+        <span class="chrome-dot bg-emerald-400"></span><span class="text-xs text-slate-400">live</span>
+      </div>
+    </header>
+
+    <!-- transcript (THE ONLY THING THAT SCROLLS) -->
+    <main class="flex-1 overflow-y-auto scroll" x-ref="scrollArea">
+      <div class="max-w-3xl mx-auto px-4 py-6 space-y-5">
+
+        <!-- empty / welcome state -->
+        <div x-show="messages.length===0" x-cloak class="text-center pt-10">
+          <h1 class="text-3xl font-bold grad mb-2">What do you need to source?</h1>
+          <p class="text-slate-400 mb-6">VendorScout's autonomous agent browses real B2B marketplaces, extracts suppliers, and ranks them for you — live.</p>
+          <div class="flex flex-wrap justify-center gap-2">
+            <template x-for="ex in examples" :key="ex">
+              <button @click="input=ex; send()" class="text-xs px-3 py-1.5 rounded-full glass hover:border-indigo-400 text-slate-300" x-text="ex"></button>
+            </template>
+          </div>
+        </div>
+
+        <!-- messages -->
+        <template x-for="(m,idx) in messages" :key="idx">
+          <div>
+            <!-- user -->
+            <div x-show="m.role==='user'" class="flex justify-end">
+              <div class="max-w-[85%] px-4 py-2.5 rounded-2xl rounded-br-sm bg-indigo-500/20 border border-indigo-400/20 text-slate-100" x-text="m.text"></div>
+            </div>
+
+            <!-- assistant -->
+            <div x-show="m.role==='assistant'" class="flex justify-start">
+              <div class="max-w-[92%] w-full space-y-3">
+
+                <!-- live working panel (while running) -->
+                <div x-show="m.running" class="glass rounded-2xl overflow-hidden">
+                  <div class="flex items-center gap-2 px-4 py-2 border-b border-white/10 bg-slate-900/40 text-xs">
+                    <span class="chrome-dot bg-emerald-400 pulse"></span>
+                    <span class="text-slate-300" x-text="m.phaseMsg || 'Starting…'"></span>
+                    <span class="ml-auto text-slate-500" x-text="m.currentUrl"></span>
+                  </div>
+                  <div class="relative bg-black/40" style="aspect-ratio:16/9" x-show="m.frame">
+                    <img :src="m.frame" class="w-full h-full object-contain" alt="agent view"/>
+                  </div>
+                  <div class="px-4 py-2 max-h-28 overflow-y-auto scroll space-y-1">
+                    <template x-for="(s,i) in m.steps.slice(-4)" :key="i">
+                      <div class="text-xs" :class="s.kind==='recover' ? 'text-amber-300':'text-slate-400'">
+                        <span x-text="s.kind==='recover' ? '↻ ' : '• '"></span><span x-text="s.text"></span>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+
+                <!-- final report card (inline, compact, no page scroll) -->
+                <template x-if="m.report">
+                  <div class="glass rounded-2xl p-4">
+                    <div class="flex items-center gap-2 mb-2">
+                      <span class="text-emerald-300 font-semibold">✓ Sourced <span x-text="m.report.vendors.length"></span> suppliers</span>
+                      <span class="text-[11px] text-slate-500" x-text="m.meta"></span>
+                    </div>
+                    <p class="text-sm text-slate-300 mb-3" x-text="m.report.summary"></p>
+                    <div class="space-y-2">
+                      <template x-for="(v,i) in m.report.vendors" :key="i">
+                        <div class="rounded-xl border border-white/10 bg-slate-900/40 px-3 py-2">
+                          <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-slate-500 text-xs" x-text="'#'+(i+1)"></span>
+                            <span class="font-semibold text-slate-100" x-text="v.name"></span>
+                            <span class="text-xs px-2 py-0.5 rounded-full"
+                                  :class="v.recommendation==='Preferred' ? 'bg-emerald-500/15 text-emerald-300' : (v.recommendation==='Consider' ? 'bg-amber-500/15 text-amber-300' : 'bg-rose-500/15 text-rose-300')"
+                                  x-text="(v.recommendation||'')+ (v.score!=null ? ' · '+v.score : '')"></span>
+                            <span class="ml-auto text-cyan-300 font-semibold text-sm" x-text="v.price || ''"></span>
+                          </div>
+                          <div class="text-xs text-slate-400 mt-0.5" x-text="[v.product, v.location].filter(Boolean).join(' · ')"></div>
+                          <div class="flex flex-wrap gap-1 mt-1.5">
+                            <template x-for="(r,ri) in (v.reasons||[])" :key="ri">
+                              <span class="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-slate-300" x-text="r"></span>
+                            </template>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+
+                <div x-show="m.error" class="glass rounded-2xl p-4 text-amber-300 text-sm" x-text="m.error"></div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </main>
+
+    <!-- input (fixed) -->
+    <footer class="shrink-0 border-t border-white/10 p-3">
+      <div class="max-w-3xl mx-auto">
+        <form @submit.prevent="send()" class="flex items-end gap-2 glass rounded-2xl p-2">
+          <textarea x-model="input" rows="1" @keydown.enter.prevent="send()" :disabled="busy"
+                    placeholder="Describe what you want to source — e.g. Hitachi 1.5–2 ton ACs, bulk of 12, best price"
+                    class="flex-1 bg-transparent resize-none outline-none text-slate-100 placeholder-slate-500 px-2 py-2 max-h-32"></textarea>
+          <button type="submit" :disabled="busy || !input.trim()"
+                  class="px-4 py-2 rounded-xl font-semibold text-slate-900 bg-gradient-to-r from-indigo-400 via-cyan-400 to-emerald-400 disabled:opacity-40">
+            <span x-show="!busy">Source ▸</span><span x-show="busy">●●●</span>
+          </button>
+        </form>
+        <div class="text-center text-[11px] text-slate-600 mt-1.5">VendorScout sources from live marketplaces · Azure OpenAI + Playwright · sessions saved on this device</div>
+      </div>
+    </footer>
+  </div>
+</div>
+
+<script>
+function chat(){
+  return {
+    sidebarOpen:true, sessions:[], currentId:null, messages:[], input:"", busy:false,
+    examples:[
+      "Hitachi 1.5–2 ton ACs, bulk of 12, best price",
+      "Industrial RO membrane suppliers in India",
+      "LED driver 36W manufacturers with prices",
+    ],
+    init(){
+      try{ this.sessions = JSON.parse(localStorage.getItem('vs:sessions')||'[]'); }catch{ this.sessions=[]; }
+      if(window.innerWidth < 768) this.sidebarOpen=false;
+      const last = localStorage.getItem('vs:current');
+      if(last && this.sessions.find(s=>s.id===last)) this.loadSession(last);
+    },
+    persist(){
+      const s = this.sessions.find(s=>s.id===this.currentId);
+      if(s){ s.messages = this.messages; s.title = s.title || (this.messages[0]?.text||'').slice(0,40); }
+      localStorage.setItem('vs:sessions', JSON.stringify(this.sessions.slice(0,50)));
+      localStorage.setItem('vs:current', this.currentId||'');
+    },
+    newChat(){ this.currentId=null; this.messages=[]; this.input=""; if(window.innerWidth<768) this.sidebarOpen=false; },
+    loadSession(id){
+      const s=this.sessions.find(s=>s.id===id); if(!s) return;
+      this.currentId=id; this.messages=s.messages||[];
+      if(window.innerWidth<768) this.sidebarOpen=false;
+      this.scrollDown();
+    },
+    scrollDown(){ this.$nextTick(()=>{ const el=this.$refs.scrollArea; if(el) el.scrollTop=el.scrollHeight; }); },
+    async send(){
+      const q=this.input.trim(); if(!q||this.busy) return;
+      this.input=""; this.busy=true;
+      if(!this.currentId){ this.currentId='s'+Math.abs(Date.now()|0)+Math.floor(performance.now()); this.sessions.unshift({id:this.currentId,title:q.slice(0,40),messages:[]}); }
+      this.messages.push({role:'user',text:q});
+      this.messages.push({role:'assistant',running:true,phaseMsg:'Starting…',frame:null,currentUrl:'',steps:[],report:null,error:null,meta:''});
+      // IMPORTANT: mutate the reactive proxy element (not the raw object) so Alpine re-renders.
+      const m=this.messages[this.messages.length-1];
+      this.persist(); this.scrollDown();
+      let r;
+      try{ r=await (await fetch('/api/scout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q})})).json(); }
+      catch(e){ m.running=false; m.error='Could not start: '+e; this.busy=false; this.persist(); return; }
+      const es=new EventSource(r.stream_url);
+      es.onmessage=(msg)=>{
+        let ev; try{ ev=JSON.parse(msg.data); }catch{ return; }
+        const t=ev.type;
+        if(t==='PHASE'){ m.phaseMsg=ev.message; }
+        else if(t==='STEP'){ if(ev.screenshot) m.frame='data:image/jpeg;base64,'+ev.screenshot; if(ev.url) m.currentUrl=ev.url; if(ev.thought) m.steps.push({kind:'step',text:ev.thought}); this.scrollDown(); }
+        else if(t==='RECOVER'){ m.steps.push({kind:'recover',text:ev.message||'re-planning'}); }
+        else if(t==='SCOUTED'){ m.phaseMsg='Found '+ev.count+' suppliers · scoring…'; }
+        else if(t==='REPORT'){ m.report=ev.report; m.running=false; m.meta=(ev.num_steps?ev.num_steps+' steps · ':'')+(ev.duration_ms?Math.round(ev.duration_ms/1000)+'s':''); this.persist(); this.scrollDown(); }
+        else if(t==='ERROR'){ m.error=ev.message; m.running=false; }
+        else if(t==='END'){ m.running=false; this.busy=false; es.close(); this.persist(); this.scrollDown(); }
+      };
+      es.onerror=()=>{ if(m.running){ /* keep waiting; SSE may reconnect */ } };
+    },
+  }
+}
+</script>
+</body>
+</html>

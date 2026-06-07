@@ -1,0 +1,34 @@
+# ============================================================
+# VendorScout - Docker Compose (self-contained, for judges & local)
+# ============================================================
+# `docker compose up --build` → http://localhost:8000
+# Provide your keys via a .env file (see .env.example).
+# Platform deploy (Traefik / vendorscout.lehana.in) lives separately at
+# /root/docker/vendorscout per the Lehana.in separation-of-concerns pattern.
+# ============================================================
+services:
+  vendorscout:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vendorscout
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - vendorscout-data:/app/data
+    # Headless Chromium needs more shared memory than Docker's 64MB default.
+    shm_size: "1gb"
+    init: true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  vendorscout-data:
+    driver: local

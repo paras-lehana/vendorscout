@@ -1,0 +1,334 @@
+# ============================================================
+# VendorScout - Self-hosted Agentic Browser
+# ============================================================
+# A drop-in replacement for the prior third-party web-agent client: same
+# public interface (run_task / run_task_streaming / run_batch / health_check)
+# and a BrowserResult with the same fields, so the 8 orchestration agents
+# only swap their web-client attribute -> `self.browser`.
+#
+# Engine: Playwright (Microsoft) + Azure OpenAI planner.
+# Loop:   OBSERVE (screenshot + a11y/DOM snapshot)
+#      -> PLAN    (Azure OpenAI -> next typed actions)
+#      -> ACT     (Playwright real clicks/typing, emit live frame)
+#      -> VERIFY  (did state change?)
+#      -> RECOVER (re-plan on failure; escalate; degrade gracefully)
+#
+# Ported concepts from parse.lehana.in: action engine + stealth
+# (puppeteer_scraper_v2.mjs), NL->action planning (ai_prompts.py),
+# self-correcting iteration (llm_handler.py).
+# ============================================================
+
+from __future__ import annotations
+
+import asyncio
+import base64
+import contextlib
+import logging
+import time
+import uuid
+from dataclasses import dataclass, field
+from typing import Any, Awaitable, Callable, Optional
+
+from app.config import settings
+from app.tools.actions import Action, execute_action
+from app.tools.llm import LLMTool
+from app.tools.planner import plan_next_step
+from app.tools import stealth
+
+logger = logging.getLogger(__name__)
+
+# Playwright is imported lazily so the app still boots (and `health_check`
+# reports "not ready") in environments where chromium isn't installed yet.
+try:  # pragma: no cover
+    from playwright.async_api import async_playwright
+    _PLAYWRIGHT_AVAILABLE = True
+except Exception:  # noqa: BLE001
+    async_playwright = None  # type: ignore
+    _PLAYWRIGHT_AVAILABLE = False
+
+OnUpdate = Optional[Callable[[dict], Awaitable[None]]]
+
+
+@dataclass
+class BrowserResult:
+    """Result of an agentic browser task. Field-compatible with the prior
+    web-agent result type so downstream code is untouched."""
+    success: bool
+    url: str
+    run_id: str = ""
+    extracted_data: dict = field(default_factory=dict)
+    raw_text: str = ""
+    error: Optional[str] = None
+    num_steps: int = 0
+    duration_ms: int = 0
+    streaming_url: str = ""          # our own live-view (set by the API layer)
+    transcript: list[dict] = field(default_factory=list)  # per-step audit trail
+
+    def to_dict(self) -> dict:
+        return {
+            "success": self.success,
+            "url": self.url,
+            "run_id": self.run_id,
+            "extracted_data": self.extracted_data,
+            "raw_text": self.raw_text[:2000],
+            "error": self.error,
+            "num_steps": self.num_steps,
+            "duration_ms": self.duration_ms,
+            "streaming_url": self.streaming_url,
+        }
+
+
+class BrowserAgentClient:
+    """Autonomous Playwright browser agent with a stable, drop-in web-client API."""
+
+    def __init__(self) -> None:
+        self.max_concurrent = getattr(settings, "BROWSER_MAX_CONCURRENCY", 3)
+        self.max_steps = getattr(settings, "BROWSER_MAX_STEPS", 12)
+        self.headless = getattr(settings, "BROWSER_HEADLESS", True)
+        self._semaphore = asyncio.Semaphore(self.max_concurrent)
+        self._llm = LLMTool()
+        self._pw = None
+        self._browser = None
+        self._launch_lock = asyncio.Lock()
+
+    # ---- browser lifecycle --------------------------------------------------
+
+    async def _ensure_browser(self):
+        if not _PLAYWRIGHT_AVAILABLE:
+            raise RuntimeError("Playwright not installed — run `playwright install chromium`")
+        async with self._launch_lock:
+            if self._browser is None:
+                self._pw = await async_playwright().start()
+                self._browser = await self._pw.chromium.launch(
+                    headless=self.headless, args=stealth.DEFAULT_LAUNCH_ARGS,
+                )
+                logger.info("Playwright Chromium launched (headless=%s)", self.headless)
+        return self._browser
+
+    @contextlib.asynccontextmanager
+    async def _new_page(self, url: str):
+        browser = await self._ensure_browser()
+        profile = stealth.profile_for(url)
+        context = await browser.new_context(**stealth.context_kwargs(profile))
+        if profile == "stealth":
+            await context.add_init_script(stealth.STEALTH_INIT_SCRIPT)
+        page = await context.new_page()
+        try:
+            yield page
+        finally:
+            with contextlib.suppress(Exception):
+                await context.close()
+
+    # ---- observe ------------------------------------------------------------
+
+    async def _observe(self, page) -> dict:
+        url = page.url
+        title = ""
+        a11y = ""
+        visible = ""
+        screenshot_b64 = ""
+        with contextlib.suppress(Exception):
+            title = await page.title()
+        with contextlib.suppress(Exception):
+            # Accessibility tree = compact interactive-element map (buttons/links/inputs).
+            tree = await page.accessibility.snapshot()
+            a11y = _flatten_a11y(tree) if tree else ""
+        # ALWAYS include visible body text too — success messages, results, and other
+        # plain-text nodes are filtered out of the a11y tree, so the planner would be
+        # blind to them (e.g. a "Enquiry sent" acknowledgement). Combine both.
+        with contextlib.suppress(Exception):
+            visible = (await page.locator("body").inner_text()).strip()
+        if a11y and visible:
+            snapshot = (a11y + "\n\n--- visible page text ---\n" + visible)[:8000]
+        else:
+            snapshot = (a11y or visible)[:8000]
+        with contextlib.suppress(Exception):
+            png = await page.screenshot(type="jpeg", quality=55, full_page=False)
+            screenshot_b64 = base64.b64encode(png).decode("ascii")
+        return {"url": url, "title": title, "snapshot": snapshot,
+                "screenshot_b64": screenshot_b64}
+
+    # ---- the agentic loop ---------------------------------------------------
+
+    async def run_task(
+        self,
+        url: str,
+        goal: str,
+        browser_profile: str = "auto",   # kept for interface compatibility
+        timeout: int = 180,
+        max_steps: Optional[int] = None,
+        on_update: OnUpdate = None,
+        allow_submit: Optional[bool] = None,
+    ) -> BrowserResult:
+        run_id = uuid.uuid4().hex[:12]
+        steps_budget = max_steps or self.max_steps
+        # Submits (incl. pressing Enter to search) are allowed BY DEFAULT so normal
+        # navigation/search works. Confirm-before-send is OPT-IN: a caller passes
+        # allow_submit=False only for safety-sensitive flows (e.g. an RFQ that should
+        # be filled-but-not-sent in production). The RFQ demo passes True explicitly.
+        if allow_submit is None:
+            allow_submit = True
+        started = time.monotonic()
+        history: list[dict] = []
+        extracted: dict = {}
+        transcript: list[dict] = []
+
+        async with self._semaphore:
+            try:
+                async with self._new_page(url) as page:
+                    await _emit(on_update, {"type": "STARTED", "runId": run_id, "url": url})
+                    # Initial navigation is the first action.
+                    await execute_action(page, Action(action="navigate", url=url,
+                                                       continue_on_error=True))
+
+                    for step in range(steps_budget):
+                        if time.monotonic() - started > timeout:
+                            return self._finish(False, url, run_id, extracted, history,
+                                                transcript, started, error="step timeout")
+
+                        obs = await self._observe(page)
+                        # Vision-assisted recovery: feed the screenshot to the planner
+                        # (gpt-4o multimodal) on the step right after a failure, where
+                        # seeing the page beats the text snapshot.
+                        recovering = bool(history and history[-1].get("status") == "error")
+                        plan = await plan_next_step(
+                            self._llm, goal, obs, history, extracted,
+                            screenshot_b64=obs["screenshot_b64"] if recovering else None,
+                        )
+                        if plan.extracted:
+                            extracted.update(plan.extracted)
+
+                        frame = {"type": "STEP", "runId": run_id, "step": step,
+                                 "message": plan.thought, "thought": plan.thought,
+                                 "url": obs["url"], "screenshot": obs["screenshot_b64"]}
+                        await _emit(on_update, frame)
+                        transcript.append({k: frame[k] for k in ("step", "thought", "url")})
+
+                        if plan.done or not plan.actions:
+                            if plan.done:
+                                return self._finish(True, page.url, run_id, extracted,
+                                                    history, transcript, started)
+                            # No actions and not done -> nudge once, else stop.
+                            history.append({"action": "noop", "status": "empty_plan"})
+                            if _stuck(history):
+                                break
+                            continue
+
+                        for act in plan.actions:
+                            # A 'wait' that fails (e.g. a guessed selector that never
+                            # appears) must not derail the run — re-observe instead.
+                            if act.action == "wait":
+                                act.continue_on_error = True
+                                act.timeout = min(act.timeout or 6000, 6000)
+                            try:
+                                res = await execute_action(page, act, allow_submit=allow_submit)
+                                history.append({"action": act.action, "status": res.status,
+                                                "error": res.error})
+                                if res.action == "extract" and res.value is not None:
+                                    extracted[res.name or act.name or "extract"] = res.value
+                            except Exception as e:  # noqa: BLE001 — RECOVER
+                                history.append({"action": act.action, "status": "error",
+                                                "error": str(e)})
+                                await _emit(on_update, {"type": "RECOVER", "runId": run_id,
+                                                        "step": step, "error": str(e),
+                                                        "message": f"recovering from: {e}"})
+                                break  # re-observe & re-plan next loop
+
+                    # Budget exhausted -> graceful degrade with whatever we have.
+                    return self._finish(bool(extracted), page.url, run_id, extracted,
+                                        history, transcript, started,
+                                        error=None if extracted else "max_steps reached")
+            except Exception as e:  # noqa: BLE001
+                logger.error("browser run_task failed for %s: %s", url, e)
+                await _emit(on_update, {"type": "ERROR", "runId": run_id, "message": str(e)})
+                return self._finish(False, url, run_id, extracted, history, transcript,
+                                    started, error=str(e))
+
+    async def run_task_streaming(
+        self, url: str, goal: str, on_update: OnUpdate = None,
+        browser_profile: str = "auto", timeout: int = 180,
+        max_steps: Optional[int] = None, allow_submit: Optional[bool] = None,
+    ) -> BrowserResult:
+        """Streaming entry point — identical loop, events flow via on_update."""
+        result = await self.run_task(url, goal, browser_profile, timeout,
+                                     max_steps=max_steps, on_update=on_update,
+                                     allow_submit=allow_submit)
+        await _emit(on_update, {"type": "COMPLETE", "runId": result.run_id,
+                                "status": "COMPLETED" if result.success else "FAILED",
+                                "resultJson": result.extracted_data})
+        return result
+
+    async def run_batch(self, tasks: list[dict]) -> list[BrowserResult]:
+        async def _one(t: dict) -> BrowserResult:
+            return await self.run_task(
+                url=t["url"], goal=t["goal"],
+                browser_profile=t.get("browser_profile", "auto"),
+                timeout=t.get("timeout", 180),
+            )
+        results = await asyncio.gather(*[_one(t) for t in tasks], return_exceptions=True)
+        out: list[BrowserResult] = []
+        for t, r in zip(tasks, results):
+            if isinstance(r, Exception):
+                out.append(BrowserResult(success=False, url=t["url"], error=str(r)))
+            else:
+                out.append(r)
+        ok = sum(1 for r in out if r.success)
+        logger.info("browser batch: %d/%d succeeded", ok, len(tasks))
+        return out
+
+    async def health_check(self) -> bool:
+        if not _PLAYWRIGHT_AVAILABLE:
+            return False
+        try:
+            await self._ensure_browser()
+            return self._browser is not None and bool(self._llm.api_key or self._llm.service_url)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("browser health check failed: %s", e)
+            return False
+
+    async def aclose(self):
+        with contextlib.suppress(Exception):
+            if self._browser:
+                await self._browser.close()
+            if self._pw:
+                await self._pw.stop()
+
+    # ---- helpers ------------------------------------------------------------
+
+    def _finish(self, success, url, run_id, extracted, history, transcript,
+                started, error=None) -> BrowserResult:
+        return BrowserResult(
+            success=success, url=url, run_id=run_id,
+            extracted_data=extracted if isinstance(extracted, dict) else {"raw": extracted},
+            raw_text=str(extracted)[:2000],
+            error=error, num_steps=len(history),
+            duration_ms=int((time.monotonic() - started) * 1000),
+            transcript=transcript,
+        )
+
+
+def _flatten_a11y(node: dict, depth: int = 0, out: Optional[list] = None) -> str:
+    """Flatten Playwright's accessibility snapshot into compact labelled lines."""
+    if out is None:
+        out = []
+    if depth > 12 or len(out) > 400:
+        return "\n".join(out)
+    role = node.get("role", "")
+    name = (node.get("name") or "").strip()
+    if role and (name or role in ("textbox", "button", "link", "combobox")):
+        out.append(f"{'  ' * min(depth, 6)}- {role}: {name[:120]}")
+    for child in node.get("children", []) or []:
+        _flatten_a11y(child, depth + 1, out)
+    return "\n".join(out)
+
+
+def _stuck(history: list[dict], window: int = 3) -> bool:
+    recent = history[-window:]
+    return len(recent) == window and all(h.get("status") in ("empty_plan", "error") for h in recent)
+
+
+async def _emit(on_update: OnUpdate, event: dict) -> None:
+    if on_update is None:
+        return
+    with contextlib.suppress(Exception):
+        await on_update(event)

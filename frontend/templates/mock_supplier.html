@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AquaPure Industries — RO Membranes &amp; Water Treatment | Send Enquiry</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>body{font-family:system-ui,Segoe UI,Roboto,sans-serif}</style>
+</head>
+<!--
+  Controlled "mock supplier" page used for SAFE transaction demos: the agent can
+  fill + SUBMIT this enquiry form on camera without contacting any real supplier.
+  Mirrors a typical Indian B2B marketplace "Contact Supplier / Send Enquiry" form.
+-->
+<body class="bg-slate-50 text-slate-800">
+  <!-- vendor header -->
+  <header class="bg-white border-b">
+    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-cyan-600 text-white grid place-items-center font-bold">AP</div>
+        <div>
+          <div class="font-bold text-slate-900">AquaPure Industries Pvt. Ltd.</div>
+          <div class="text-xs text-slate-500">RO Membranes &middot; Industrial Water Treatment &middot; Mumbai, India · ISO 9001</div>
+        </div>
+      </div>
+      <span class="text-xs px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">TrustSEAL Verified</span>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 py-8 grid md:grid-cols-3 gap-8">
+    <!-- product info -->
+    <section class="md:col-span-2">
+      <h1 class="text-2xl font-bold text-slate-900">Industrial RO Membrane — 4040 / 8040 (1000–10000 GPD)</h1>
+      <p class="mt-2 text-slate-600">High-rejection thin-film composite RO membranes for commercial &amp; industrial water purification. Suitable for brackish water, ISO 9001 certified manufacturing, pan-India dispatch.</p>
+      <div class="mt-4 inline-block text-xl font-bold text-cyan-700">₹ 9,500 – ₹ 30,000 <span class="text-sm font-normal text-slate-500">/ Piece</span></div>
+      <ul class="mt-4 text-sm text-slate-600 list-disc pl-5 space-y-1">
+        <li>MOQ: 5 pieces &middot; Lead time: 3–7 days</li>
+        <li>Sizes: 4040, 8040 &middot; Capacity: 1000–10000 GPD</li>
+        <li>Certifications: ISO 9001, CE</li>
+      </ul>
+    </section>
+
+    <!-- enquiry form -->
+    <aside class="md:col-span-1">
+      <div class="bg-white rounded-xl border shadow-sm p-5">
+        <h2 class="font-semibold text-slate-900 mb-3">Send Enquiry to Supplier</h2>
+
+        <form id="enquiry-form" class="space-y-3" onsubmit="return submitEnquiry(event)">
+          <div>
+            <label class="block text-xs text-slate-500 mb-1" for="product">Product / Requirement</label>
+            <input id="product" name="product" type="text"
+                   class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="e.g. 8040 RO membrane, 5000 GPD" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-500 mb-1" for="quantity">Quantity</label>
+            <input id="quantity" name="quantity" type="text"
+                   class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="e.g. 500 pieces" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-500 mb-1" for="name">Your Name</label>
+            <input id="name" name="name" type="text" class="w-full border rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-500 mb-1" for="email">Email</label>
+            <input id="email" name="email" type="email" class="w-full border rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-500 mb-1" for="phone">Phone</label>
+            <input id="phone" name="phone" type="text" class="w-full border rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-500 mb-1" for="message">Message</label>
+            <textarea id="message" name="message" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm"
+                      placeholder="Share your requirement, target price, certifications needed…"></textarea>
+          </div>
+          <button id="send-enquiry-btn" type="submit"
+                  class="w-full py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-semibold">
+            Send Enquiry
+          </button>
+        </form>
+
+        <!-- success acknowledgement (revealed after submit) -->
+        <div id="enquiry-success" class="hidden mt-2 p-4 rounded-lg bg-emerald-50 border border-emerald-200">
+          <div class="font-semibold text-emerald-800 text-base">✓ Enquiry sent successfully</div>
+          <p class="text-sm text-emerald-700 mt-1">
+            Thank you! AquaPure Industries has received your enquiry and will respond shortly.
+          </p>
+          <div class="mt-3 text-emerald-900 text-lg">
+            Reference number: <span id="enquiry-ref" class="font-mono font-bold"></span>
+          </div>
+        </div>
+      </div>
+      <p class="text-[11px] text-slate-400 mt-2">This is a demo supplier page used for safe testing. No real message is sent anywhere.</p>
+    </aside>
+  </main>
+
+  <script>
+    function submitEnquiry(e){
+      e.preventDefault();
+      // Deterministic-ish reference (no Date.now dependency for reproducibility on camera)
+      const n = (document.getElementById('product').value + document.getElementById('quantity').value).length;
+      const ref = 'VS-RFQ-' + (10000 + (n*37 % 89999));
+      document.getElementById('enquiry-form').classList.add('hidden');
+      const ok = document.getElementById('enquiry-success');
+      ok.classList.remove('hidden');
+      document.getElementById('enquiry-ref').textContent = ref;
+      // Expose for easy extraction by the agent
+      document.title = 'Enquiry Sent — ' + ref;
+      ok.setAttribute('data-enquiry-ref', ref);
+      return false;
+    }
+  </script>
+</body>
+</html>

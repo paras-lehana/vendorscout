@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}{{ app_name }} - Demo Video{% endblock %}
+
+{% block content %}
+<section class="max-w-6xl mx-auto pt-12 pb-16 space-y-8 animate-fade-in">
+    <div class="text-center space-y-4">
+        <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
+            <i data-lucide="play-circle" class="w-4 h-4"></i>
+            <span>Hosted Demo Path</span>
+        </div>
+        <h1 class="text-4xl md:text-6xl font-extrabold text-white leading-tight">
+            VendorScout Pro
+            <span class="gradient-text-animated block mt-2">Live Demo Walkthrough</span>
+        </h1>
+        <p class="text-lg text-gray-400 max-w-3xl mx-auto">
+            A stable first-party demo URL for judges, investors, and reviewers.
+            Watch the product walkthrough here or open the YouTube source directly.
+        </p>
+        <div class="flex flex-wrap justify-center gap-3 pt-2">
+            <a
+                href="{{ demo_video_url }}"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold hover:from-red-600 hover:to-red-700 transition-all shadow-lg shadow-red-500/20"
+            >
+                <i data-lucide="youtube" class="w-4 h-4"></i>
+                Open on YouTube
+            </a>
+            <a
+                href="/"
+                class="inline-flex items-center gap-2 px-5 py-3 rounded-xl glass-card text-white font-semibold hover:bg-white/10 transition-all"
+            >
+                <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                Back to App
+            </a>
+        </div>
+    </div>
+
+    <div class="glass rounded-3xl p-4 md:p-6 shadow-2xl shadow-brand-900/20">
+        <div class="aspect-video overflow-hidden rounded-2xl border border-white/10 bg-slate-950">
+            <iframe
+                src="{{ demo_embed_url }}"
+                title="VendorScout Pro Demo Video"
+                class="w-full h-full"
+                loading="lazy"
+                referrerpolicy="strict-origin-when-cross-origin"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowfullscreen
+            ></iframe>
+        </div>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-4">
+        <div class="glass-card rounded-2xl p-5">
+            <div class="flex items-center gap-2 text-brand-300 mb-3">
+                <i data-lucide="bot" class="w-5 h-5"></i>
+                <span class="font-semibold">10-Agent Pipeline</span>
+            </div>
+            <p class="text-sm text-gray-400">Shows how VendorScout coordinates discovery, compliance, financial, risk, authenticity, price, specification, analysis, and reporting agents.</p>
+        </div>
+        <div class="glass-card rounded-2xl p-5">
+            <div class="flex items-center gap-2 text-cyan-300 mb-3">
+                <i data-lucide="globe" class="w-5 h-5"></i>
+                <span class="font-semibold">Autonomous Browser Agent in Production</span>
+            </div>
+            <p class="text-sm text-gray-400">Demonstrates live web navigation across real vendor websites instead of static mock data or a database wrapper.</p>
+        </div>
+        <div class="glass-card rounded-2xl p-5">
+            <div class="flex items-center gap-2 text-amber-300 mb-3">
+                <i data-lucide="skip-forward" class="w-5 h-5"></i>
+                <span class="font-semibold">Pipeline Control</span>
+            </div>
+            <p class="text-sm text-gray-400">Highlights stop, skip, and fast-forward controls that let users intervene mid-research instead of waiting on a black box.</p>
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,240 @@
+# ============================================================
+# VendorScout - Browser action schema + Playwright executors
+# ============================================================
+# Ported from parse.lehana.in's puppeteer_scraper_v2.mjs action engine
+# (navigate / fill / click / wait / extract) to Playwright (Microsoft),
+# plus scroll / press / select for richer multi-step transactions.
+#
+# Each executor performs ONE real browser action and returns a result dict
+# (status + metadata) that the agentic loop logs and streams to the UI.
+# ============================================================
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from typing import Any, Literal, Optional
+
+from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
+
+ActionType = Literal[
+    "navigate", "fill", "click", "wait", "extract",
+    "scroll", "press", "select",
+]
+
+
+class Action(BaseModel):
+    """A single browser action. Mirrors parse.lehana.in's schema verbatim
+    (so its planner prompt + any saved workflows port over) and extends it."""
+    action: ActionType
+    # navigate
+    url: Optional[str] = None
+    wait_until: str = "networkidle"          # domcontentloaded|load|networkidle|commit
+    # fill
+    selector: Optional[str] = None
+    value: Optional[str] = None
+    clear: bool = True
+    type_delay: int = 40
+    # wait
+    until: Optional[str] = None              # duration|navigation|selector|idle
+    duration: Optional[int] = None
+    visible: bool = True
+    # extract
+    name: Optional[str] = None
+    extract_type: str = "text"               # text|html|attribute
+    attribute: Optional[str] = None
+    find_type: str = "element"               # element|elements
+    # scroll / press / select
+    direction: str = "down"                  # down|up|bottom|top
+    amount: int = 800
+    key: Optional[str] = None                # press: e.g. "Enter"
+    option: Optional[str] = None             # select: value/label
+    # control
+    timeout: int = 15000
+    continue_on_error: bool = False
+    # planner-only narration (not executed)
+    thought: Optional[str] = None
+
+
+class ActionResult(BaseModel):
+    action: str
+    status: str                              # success|error|skipped
+    name: Optional[str] = None               # for extract — the field name
+    detail: dict[str, Any] = Field(default_factory=dict)
+    error: Optional[str] = None
+    value: Any = None                        # for extract
+
+
+# ---- Executors (Playwright async `page`) ------------------------------------
+
+async def _navigate(page, a: Action) -> ActionResult:
+    if not a.url:
+        raise ValueError("navigate requires 'url'")
+    await page.goto(a.url, wait_until=a.wait_until, timeout=a.timeout)
+    return ActionResult(action="navigate", status="success",
+                        detail={"final_url": page.url})
+
+
+async def _fill(page, a: Action) -> ActionResult:
+    if not a.selector or a.value is None:
+        raise ValueError("fill requires 'selector' and 'value'")
+    loc = page.locator(a.selector).first
+    await loc.wait_for(state="visible", timeout=a.timeout)
+    if a.clear:
+        await loc.fill("")
+    await loc.type(str(a.value), delay=a.type_delay)
+    return ActionResult(action="fill", status="success",
+                        detail={"selector": a.selector, "len": len(str(a.value))})
+
+
+async def _click(page, a: Action) -> ActionResult:
+    if not a.selector:
+        raise ValueError("click requires 'selector'")
+    loc = page.locator(a.selector).first
+    await loc.wait_for(state="visible", timeout=a.timeout)
+    await loc.scroll_into_view_if_needed(timeout=a.timeout)
+    await loc.click(timeout=a.timeout)
+    return ActionResult(action="click", status="success", detail={"selector": a.selector})
+
+
+async def _wait(page, a: Action) -> ActionResult:
+    until = a.until or "duration"
+    if until == "duration":
+        await asyncio.sleep((a.duration or 1000) / 1000)
+    elif until == "navigation":
+        await page.wait_for_load_state(a.wait_until, timeout=a.timeout)
+    elif until == "selector":
+        if not a.selector:
+            raise ValueError("wait until=selector requires 'selector'")
+        await page.locator(a.selector).first.wait_for(
+            state="visible" if a.visible else "attached", timeout=a.timeout)
+    elif until == "idle":
+        await page.wait_for_load_state("networkidle", timeout=a.timeout)
+    else:
+        raise ValueError(f"unknown wait until={until}")
+    return ActionResult(action="wait", status="success", detail={"until": until})
+
+
+async def _extract(page, a: Action) -> ActionResult:
+    if not a.selector or not a.name:
+        raise ValueError("extract requires 'selector' and 'name'")
+    loc = page.locator(a.selector)
+    if a.find_type == "elements":
+        n = await loc.count()
+        out = []
+        for i in range(n):
+            out.append(await _read(loc.nth(i), a))
+        value: Any = out
+    else:
+        value = await _read(loc.first, a) if await loc.count() else ""
+    return ActionResult(action="extract", status="success", name=a.name,
+                        value=value, detail={"selector": a.selector, "count": (
+                            len(value) if isinstance(value, list) else 1)})
+
+
+async def _read(loc, a: Action):
+    try:
+        if a.extract_type == "text":
+            return (await loc.inner_text()).strip()
+        if a.extract_type == "html":
+            return await loc.inner_html()
+        if a.extract_type == "attribute":
+            return await loc.get_attribute(a.attribute or "value")
+    except Exception:
+        return ""
+    return ""
+
+
+async def _scroll(page, a: Action) -> ActionResult:
+    if a.direction == "bottom":
+        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    elif a.direction == "top":
+        await page.evaluate("window.scrollTo(0, 0)")
+    else:
+        delta = a.amount if a.direction == "down" else -a.amount
+        await page.evaluate(f"window.scrollBy(0, {delta})")
+    return ActionResult(action="scroll", status="success", detail={"direction": a.direction})
+
+
+async def _press(page, a: Action) -> ActionResult:
+    if not a.key:
+        raise ValueError("press requires 'key'")
+    if a.selector:
+        await page.locator(a.selector).first.press(a.key, timeout=a.timeout)
+    else:
+        await page.keyboard.press(a.key)
+    return ActionResult(action="press", status="success", detail={"key": a.key})
+
+
+async def _select(page, a: Action) -> ActionResult:
+    if not a.selector or a.option is None:
+        raise ValueError("select requires 'selector' and 'option'")
+    await page.locator(a.selector).first.select_option(a.option, timeout=a.timeout)
+    return ActionResult(action="select", status="success",
+                        detail={"selector": a.selector, "option": a.option})
+
+
+_DISPATCH = {
+    "navigate": _navigate, "fill": _fill, "click": _click, "wait": _wait,
+    "extract": _extract, "scroll": _scroll, "press": _press, "select": _select,
+}
+
+# Words on a control that indicate it would SUBMIT a form / send an enquiry.
+# Used by the confirm-before-send guard (over-block on purpose when disabled).
+_SUBMIT_WORDS = (
+    "submit", "send enquiry", "send inquiry", "send message", "send request",
+    "get best quote", "get quote", "request quote", "request a quote",
+    "contact supplier", "enquire", "inquire", "send", "place order", "buy now",
+)
+
+
+async def _would_submit(page, a: Action) -> bool:
+    """True if this action would likely submit a form / send an enquiry."""
+    if a.action == "press":
+        return (a.key or "").lower() in ("enter", "return")
+    if a.action != "click" or not a.selector:
+        return False
+    try:
+        loc = page.locator(a.selector).first
+        if await loc.count() == 0:
+            return False
+        info = await loc.evaluate(
+            "el => ({type:(el.getAttribute('type')||'').toLowerCase(),"
+            "text:((el.innerText||el.value||'')+'').toLowerCase(),"
+            "inForm: !!el.closest('form')})"
+        )
+        if info.get("type") == "submit":
+            return True
+        text = info.get("text", "")
+        return any(w in text for w in _SUBMIT_WORDS)
+    except Exception:
+        # If we can't tell, err on the side of caution (treat as submit).
+        return True
+
+
+async def execute_action(page, a: Action, allow_submit: bool = True) -> ActionResult:
+    """Run one action; raise on error unless continue_on_error is set.
+
+    When allow_submit is False (confirm-before-send), submit-type clicks/Enter
+    are refused at the executor level — the prompt instruction is only
+    defense-in-depth; this is the hard guard.
+    """
+    fn = _DISPATCH.get(a.action)
+    if fn is None:
+        return ActionResult(action=a.action, status="skipped",
+                            error="unknown_action_type")
+    if not allow_submit and a.action in ("click", "press") and await _would_submit(page, a):
+        logger.info("confirm-before-send: blocked submit-type %s on %r", a.action, a.selector)
+        return ActionResult(action=a.action, status="skipped",
+                            error="autosubmit_disabled",
+                            detail={"reason": "confirm-before-send guard blocked a submit-type action",
+                                    "selector": a.selector, "key": a.key})
+    try:
+        return await fn(page, a)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("action %s failed: %s", a.action, e)
+        if a.continue_on_error:
+            return ActionResult(action=a.action, status="error", error=str(e))
+        raise

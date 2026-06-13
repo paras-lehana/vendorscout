@@ -103,11 +103,15 @@
       <div class="text-[11px] uppercase tracking-wide text-slate-500 px-1 mb-1">Your sessions</div>
       <div class="flex-1 overflow-y-auto scroll space-y-1">
         <template x-for="s in sessions" :key="s.id">
-          <button @click="loadSession(s.id)"
-                  class="w-full text-left px-3 py-2 rounded-lg text-sm truncate hover:bg-white/5"
-                  :class="s.id===currentId ? 'bg-white/10 text-white' : 'text-slate-300'">
-            <span x-text="s.title || 'New chat'"></span>
-          </button>
+          <div class="group flex items-center rounded-lg" :class="s.id===currentId ? 'bg-white/10' : 'hover:bg-white/5'">
+            <button @click="loadSession(s.id)" @dblclick="renameSession(s.id)"
+                    class="flex-1 min-w-0 text-left px-3 py-2 rounded-lg text-sm truncate"
+                    :class="s.id===currentId ? 'text-white' : 'text-slate-300'" :title="(s.title||'New chat')+' — double-click to rename'">
+              <span x-text="s.title || 'New chat'"></span>
+            </button>
+            <button @click="deleteSession(s.id)" title="Delete chat" aria-label="Delete chat"
+                    class="shrink-0 px-2.5 py-2 text-slate-600 hover:text-rose-300 opacity-0 group-hover:opacity-100 focus:opacity-100">✕</button>
+          </div>
         </template>
         <div x-show="sessions.length===0" class="text-xs text-slate-500 px-1 mt-2">No past chats yet.</div>
       </div>
@@ -597,6 +601,8 @@ function chat(){
       localStorage.setItem('vs:current', this.currentId||'');
     },
     newChat(){ this.currentId=null; this.messages=[]; this.input=""; if(window.innerWidth<768) this.sidebarOpen=false; },
+    deleteSession(id){ this.sessions=this.sessions.filter(s=>s.id!==id); if(this.currentId===id){ this.currentId=null; this.messages=[]; } try{ localStorage.setItem('vs:sessions',JSON.stringify(this.sessions.slice(0,50))); localStorage.setItem('vs:current',this.currentId||''); }catch{} },
+    renameSession(id){ const s=this.sessions.find(x=>x.id===id); if(!s) return; const t=prompt('Rename this chat:', s.title||''); if(t!==null){ s.title=(t.trim()||s.title); try{ localStorage.setItem('vs:sessions',JSON.stringify(this.sessions.slice(0,50))); }catch{} } },
     loadSession(id){
       const s=this.sessions.find(s=>s.id===id); if(!s) return;
       this.currentId=id; this.messages=s.messages||[];

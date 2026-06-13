@@ -367,23 +367,26 @@ async def scout_status(run_id: str):
 
 class AskRequest(BaseModel):
     question: str
+    report: dict | None = None   # client-provided fallback (survives restarts/reloads)
 
 
 @router.post("/{run_id}/ask")
 async def ask_scout(run_id: str, body: AskRequest):
     """Answer a buyer's follow-up about THIS report at runtime, grounded in the
-    stored reasoning (ranked vendors + per-dimension evidence + raw listings)."""
+    report's reasoning. Stateless-resilient: uses the server's stored run when it
+    exists (richer — includes raw listings), otherwise the report the client sends
+    (so Q&A keeps working after a redeploy/restart or on a reloaded session)."""
     st = _RUNS.get(run_id)
-    if not st or not st.get("report"):
-        return JSONResponse({"error": "unknown or incomplete run_id"}, status_code=404)
-    report = st["report"]
+    report = (st or {}).get("report") or body.report
+    if not report:
+        return JSONResponse({"error": "no report available to answer from"}, status_code=404)
     context = {
         "query": report.get("query"),
         "requirement": report.get("parsed"),
         "data_source": report.get("source"),
         "executive_summary": report.get("executive_summary"),
         "ranked_vendors": report.get("vendors"),
-        "raw_listings": st.get("raw_vendors", []),
+        "raw_listings": (st or {}).get("raw_vendors") or report.get("vendors", []),
     }
     answer = await _llm.generate_text(
         prompt=(f"REPORT DATA (JSON):\n{json.dumps(context)[:11000]}\n\n"

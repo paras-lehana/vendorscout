@@ -620,10 +620,10 @@ function chat(){
         else if(t==='STEP'){ if(ev.screenshot) m.frame='data:image/jpeg;base64,'+ev.screenshot; if(ev.url) m.currentUrl=ev.url; if(ev.thought) m.steps.push({kind:'step',text:ev.thought}); this.scrollDown(); }
         else if(t==='RECOVER'){ m.steps.push({kind:'recover',text:ev.message||'re-planning'}); }
         else if(t==='SCOUTED'){ m.phaseMsg='Found '+ev.count+' suppliers · scoring…'; }
-        else if(t==='REPORT'){ m.report=ev.report; m.meta=(ev.num_steps?ev.num_steps+' steps · ':'')+(ev.duration_ms?Math.round(ev.duration_ms/1000)+'s':''); this.persist(); this.scrollDown(); /* keep running: the agent now auto-drafts an enquiry */ }
+        else if(t==='REPORT'){ m.report=ev.report; m.meta=(ev.num_steps?ev.num_steps+' steps · ':'')+(ev.duration_ms?Math.round(ev.duration_ms/1000)+'s':''); if(this.messages[this.messages.length-1]===m) this.busy=false; this.persist(); this.scrollDown(); /* free the UI now; the agent keeps auto-drafting the enquiry in the background */ }
         else if(t==='ACTION'){ m.action=ev.result; this.persist(); this.scrollDown(); }
-        else if(t==='ERROR'){ m.error=ev.message; m.running=false; }
-        else if(t==='END'){ m.running=false; this.busy=false; es.close(); this.persist(); this.scrollDown(); }
+        else if(t==='ERROR'){ m.error=ev.message; m.running=false; if(this.messages[this.messages.length-1]===m) this.busy=false; }
+        else if(t==='END'){ m.running=false; if(this.messages[this.messages.length-1]===m) this.busy=false; es.close(); this.persist(); this.scrollDown(); }
       };
       es.onerror=()=>{ if(m.running){ /* keep waiting; SSE may reconnect */ } };
     },

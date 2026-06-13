@@ -183,9 +183,14 @@
                         </div>
                         <p class="text-[13.5px] text-slate-300 mt-1 ln2 leading-snug" :title="m.report.executive_summary||m.report.summary" x-text="m.report.executive_summary||m.report.summary"></p>
                       </div>
-                      <span class="pill border border-white/10 shrink-0"
-                            :class="(m.compare||[]).length===2 ? 'bg-cyan-500/15 text-cyan-200 border-cyan-400/40':'text-slate-400'"
-                            x-text="(m.compare||[]).length===2?'Comparing 2':((m.compare||[]).length===1?'Pick 1 more':(m.detail!=null?'Detail':'Tick 2 to compare'))"></span>
+                      <div class="flex items-center gap-2 shrink-0">
+                        <button @click="copySummary(m)" class="pill border press" title="Copy the summary + top picks"
+                                :class="m.copied?'border-emerald-400/40 bg-emerald-500/15 text-emerald-300':'border-white/10 text-slate-300 hover:bg-white/5'"
+                                x-text="m.copied?'✓ Copied':'⧉ Copy'"></button>
+                        <span class="pill border border-white/10"
+                              :class="(m.compare||[]).length===2 ? 'bg-cyan-500/15 text-cyan-200 border-cyan-400/40':'text-slate-400'"
+                              x-text="(m.compare||[]).length===2?'Comparing 2':((m.compare||[]).length===1?'Pick 1 more':(m.detail!=null?'Detail':'Tick 2 to compare'))"></span>
+                      </div>
                     </div>
 
                     <!-- ===================== COMPARE VIEW ===================== -->
@@ -291,41 +296,65 @@
 
                     <!-- ===================== GRID VIEW (default) ===================== -->
                     <template x-if="(m.compare||[]).length!==2 && m.detail===null">
-                      <div class="grid sm:grid-cols-2 gap-2">
-                        <template x-for="(v,i) in m.report.vendors" :key="i">
-                          <div class="fcard p-5 fade-up" :style="'animation-delay:'+(i*45)+'ms'" :class="(m.compare||[]).includes(i)?'sel':((m.compare||[]).length===1?'dim':'')">
-                            <div class="flex items-start justify-between gap-3">
-                              <div class="min-w-0">
-                                <div class="text-[13px] text-slate-500 num" x-text="'#'+(i+1)"></div>
-                                <button @click="openDetail(m,i)" class="text-[19px] font-semibold text-slate-100 hover:text-cyan-300 text-left ln2 leading-tight" x-text="v.name"></button>
-                              </div>
-                              <div class="text-right shrink-0">
-                                <div class="text-[22px] font-bold text-cyan-300 num leading-none" x-text="v.price||''"></div>
-                                <span class="pill mt-1.5 inline-block num" :class="recPill(v.recommendation)" x-text="(v.recommendation||'')+(v.score!=null?' · '+v.score:'')"></span>
-                              </div>
-                            </div>
-                            <div class="text-[14.5px] text-slate-400 mt-2 ln1" x-text="[v.product, v.location].filter(Boolean).join(' · ')"></div>
-                            <!-- top-3 verified factor bars -->
-                            <div class="mt-3.5 space-y-2">
-                              <template x-for="t in topFactors(v)" :key="'tf'+t.d.k">
-                                <div class="flex items-center gap-2.5 text-[14px]">
-                                  <span class="w-24 shrink-0 text-slate-300" x-text="t.d.full"></span>
-                                  <div class="vbar flex-1"><div class="vfill" :style="'width:'+t.s+'%;background:'+t.d.c"></div></div>
-                                  <span class="w-8 text-right text-slate-100 num font-medium" x-text="t.s"></span>
+                      <div>
+                        <!-- sort + filter toolbar -->
+                        <div class="flex items-center gap-2 flex-wrap mb-3">
+                          <span class="text-[12px] text-slate-500">Sort</span>
+                          <select x-model="m.sort" class="bg-slate-900/60 border border-white/10 rounded-md text-[12.5px] px-2 py-1.5 text-slate-200 outline-none">
+                            <option value="rank">Best match</option>
+                            <option value="score">Score</option>
+                            <option value="price-asc">Price ↑ (low→high)</option>
+                            <option value="price-desc">Price ↓ (high→low)</option>
+                          </select>
+                          <span class="w-px h-4 bg-white/10 mx-1"></span>
+                          <template x-for="f in [['all','All'],['Preferred','Preferred'],['Consider','Consider'],['Caution','Caution'],['priced','Has price']]" :key="f[0]">
+                            <button @click="m.filter=f[0]" class="text-[12px] px-2.5 py-1 rounded-full border press"
+                                    :class="(m.filter||'all')===f[0]?'bg-cyan-500/15 text-cyan-200 border-cyan-400/40':'border-white/10 text-slate-400 hover:bg-white/5'"
+                                    x-text="f[1]"></button>
+                          </template>
+                          <span class="ml-auto text-[12px] text-slate-500 num" x-text="viewVendors(m).length+' shown'"></span>
+                        </div>
+                        <div class="grid sm:grid-cols-2 gap-2">
+                          <template x-for="o in viewVendors(m)" :key="o.i">
+                            <div class="fcard p-5 fade-up" :style="'animation-delay:'+(o.i*45)+'ms'"
+                                 :class="(m.compare||[]).includes(o.i)?'sel':((m.compare||[]).length===1?'dim':'')">
+                              <div class="flex items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                  <div class="flex items-center gap-2">
+                                    <span class="text-[13px] text-slate-500 num" x-text="'#'+(o.i+1)"></span>
+                                    <span x-show="o.i===0" class="pill bg-amber-400/15 text-amber-300 border border-amber-400/30">★ Top pick</span>
+                                  </div>
+                                  <button @click="openDetail(m,o.i)" class="text-[19px] font-semibold text-slate-100 hover:text-cyan-300 text-left ln2 leading-tight" x-text="o.v.name"></button>
                                 </div>
-                              </template>
-                              <div x-show="topFactors(v).length===0" class="text-[13px] text-slate-600">No verified factors on listing</div>
+                                <div class="text-right shrink-0">
+                                  <div class="text-[22px] font-bold text-cyan-300 num leading-none" x-text="o.v.price||''"></div>
+                                  <span class="pill mt-1.5 inline-block num" :class="recPill(o.v.recommendation)" x-text="(o.v.recommendation||'')+(o.v.score!=null?' · '+o.v.score:'')"></span>
+                                </div>
+                              </div>
+                              <div class="text-[14.5px] text-slate-400 mt-2 ln1" x-text="[o.v.product, o.v.location].filter(Boolean).join(' · ')"></div>
+                              <!-- top-3 verified factor bars -->
+                              <div class="mt-3.5 space-y-2">
+                                <template x-for="t in topFactors(o.v)" :key="'tf'+t.d.k">
+                                  <div class="flex items-center gap-2.5 text-[14px]">
+                                    <span class="w-24 shrink-0 text-slate-300" x-text="t.d.full"></span>
+                                    <div class="vbar flex-1"><div class="vfill" :style="'width:'+t.s+'%;background:'+t.d.c"></div></div>
+                                    <span class="w-8 text-right text-slate-100 num font-medium" x-text="t.s"></span>
+                                  </div>
+                                </template>
+                                <div x-show="topFactors(o.v).length===0" class="text-[13px] text-slate-600">No verified factors on listing</div>
+                              </div>
+                              <!-- actions -->
+                              <div class="flex items-center gap-3 mt-4 pt-3 border-t border-white/10">
+                                <button @click="toggleCompare(m,o.i)" class="text-[13.5px] px-3 py-1.5 rounded-md border border-white/10 hover:bg-white/5 press"
+                                        :class="(m.compare||[]).includes(o.i)?'text-cyan-300 border-cyan-400/40 bg-cyan-500/10':'text-slate-300'"
+                                        x-text="(m.compare||[]).includes(o.i)?'✓ Compare':'+ Compare'"></button>
+                                <button @click="openDetail(m,o.i)" class="text-[13.5px] text-slate-400 hover:text-cyan-300">Details</button>
+                                <a x-show="o.v.url" :href="o.v.url" target="_blank" rel="noopener" class="text-[13.5px] text-cyan-400 hover:text-cyan-300 ml-auto">View ↗</a>
+                              </div>
                             </div>
-                            <!-- actions -->
-                            <div class="flex items-center gap-3 mt-4 pt-3 border-t border-white/10">
-                              <button @click="toggleCompare(m,i)" class="text-[13.5px] px-3 py-1.5 rounded-md border border-white/10 hover:bg-white/5"
-                                      :class="(m.compare||[]).includes(i)?'text-cyan-300 border-cyan-400/40 bg-cyan-500/10':'text-slate-300'"
-                                      x-text="(m.compare||[]).includes(i)?'✓ Compare':'+ Compare'"></button>
-                              <button @click="openDetail(m,i)" class="text-[13.5px] text-slate-400 hover:text-cyan-300">Details</button>
-                              <a x-show="v.url" :href="v.url" target="_blank" rel="noopener" class="text-[13.5px] text-cyan-400 hover:text-cyan-300 ml-auto">View ↗</a>
-                            </div>
-                          </div>
-                        </template>
+                          </template>
+                          <div x-show="viewVendors(m).length===0" class="col-span-full text-center text-slate-500 text-[13px] py-6">No suppliers match this filter.</div>
+                        </div>
                       </div>
                     </template>
 
@@ -434,6 +463,26 @@ function chat(){
     topFactors(v){ return this.dims.map(d=>({d, s:this.cmpScore(v,d.k)})).filter(x=>x.s>0).sort((a,b)=>b.s-a.s).slice(0,3); },
     others(m){ return (m.report.vendors||[]).map((v,i)=>({v,i})).filter(o=>!(m.compare||[]).includes(o.i)); },
     openDetail(m,i){ m.detail = (m.detail===i ? null : i); },
+    _priceNum(p){ if(!p) return null; const n=String(p).replace(/[^0-9.]/g,''); return n?parseFloat(n):null; },
+    viewVendors(m){
+      let arr=(m.report.vendors||[]).map((v,i)=>({v,i}));
+      const f=m.filter||'all';
+      if(f==='priced') arr=arr.filter(o=>this._priceNum(o.v.price)!=null);
+      else if(['Preferred','Consider','Caution'].includes(f)) arr=arr.filter(o=>o.v.recommendation===f);
+      const s=m.sort||'rank';
+      if(s==='score') arr.sort((a,b)=>(b.v.score||0)-(a.v.score||0));
+      else if(s==='price-asc') arr.sort((a,b)=>((this._priceNum(a.v.price)??1e15)-(this._priceNum(b.v.price)??1e15)));
+      else if(s==='price-desc') arr.sort((a,b)=>((this._priceNum(b.v.price)??-1)-(this._priceNum(a.v.price)??-1)));
+      return arr;
+    },
+    copySummary(m){
+      const r=m.report; if(!r) return;
+      const lines=[(r.executive_summary||r.summary||'').trim(),''];
+      (r.vendors||[]).slice(0,5).forEach((v,i)=>lines.push(`${i+1}. ${v.name} — ${v.price||'price n/a'} · ${v.recommendation||''} ${v.score!=null?'('+v.score+'/100)':''}${v.url?' · '+v.url:''}`));
+      lines.push('', '— via VendorScout ('+(r.source||'')+')');
+      const txt=lines.join('\n');
+      (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>{m.copied=true; setTimeout(()=>m.copied=false,1600);}).catch(()=>{m.copied=false;});
+    },
     srcLabel(s){ return s==='live'?'🟢 Live scrape':s==='catalog'?'📚 IndiaMART catalog':s==='sample'?'🗂 Real sample':'source'; },
     evTip(v,k){ const e=v.evidence&&v.evidence[k]; if(!e) return k; return (e.verifiable?'Seen in listing':'Not on listing — verify on supplier visit')+(e.note?': '+e.note:''); },
     dimPct(v,k){ const e=v.evidence&&v.evidence[k]; if(!e||!e.verifiable) return 8; const s=(e.score==null?60:e.score); return Math.max(12,Math.min(100,s)); },
@@ -468,7 +517,7 @@ function chat(){
       this.input=""; this.busy=true;
       if(!this.currentId){ this.currentId='s'+Math.abs(Date.now()|0)+Math.floor(performance.now()); this.sessions.unshift({id:this.currentId,title:q.slice(0,40),messages:[]}); }
       this.messages.push({role:'user',text:q});
-      this.messages.push({role:'assistant',running:true,phaseMsg:'Starting…',frame:null,currentUrl:'',steps:[],report:null,error:null,meta:'',runId:null,qa:[],ask:'',asking:false,action:null,compare:[],detail:null});
+      this.messages.push({role:'assistant',running:true,phaseMsg:'Starting…',frame:null,currentUrl:'',steps:[],report:null,error:null,meta:'',runId:null,qa:[],ask:'',asking:false,action:null,compare:[],detail:null,sort:'rank',filter:'all',copied:false});
       // IMPORTANT: mutate the reactive proxy element (not the raw object) so Alpine re-renders.
       const m=this.messages[this.messages.length-1];
       this.persist(); this.scrollDown();

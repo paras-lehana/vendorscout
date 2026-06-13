@@ -97,6 +97,19 @@ class BrowserAgentClient:
         if not _PLAYWRIGHT_AVAILABLE:
             raise RuntimeError("Playwright not installed — run `playwright install chromium`")
         async with self._launch_lock:
+            # Self-heal: a long-lived Chromium can crash/exit (OOM, sandbox death)
+            # while `self._browser` still points at the dead handle. Detect a
+            # disconnected browser and tear it down so we relaunch a fresh one —
+            # otherwise every `new_context()` fails with "browser has been closed".
+            if self._browser is not None and not self._browser.is_connected():
+                logger.warning("Playwright browser disconnected — relaunching")
+                with contextlib.suppress(Exception):
+                    await self._browser.close()
+                with contextlib.suppress(Exception):
+                    if self._pw:
+                        await self._pw.stop()
+                self._browser = None
+                self._pw = None
             if self._browser is None:
                 self._pw = await async_playwright().start()
                 self._browser = await self._pw.chromium.launch(

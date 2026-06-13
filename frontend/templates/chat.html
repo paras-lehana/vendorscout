@@ -340,9 +340,21 @@
                               <div class="text-lg font-semibold text-slate-100 leading-tight" x-text="v.name"></div>
                               <div class="text-[13px] text-slate-400 mt-1" x-text="[v.product, v.location].filter(Boolean).join(' · ')"></div>
                             </div>
-                            <div class="text-right shrink-0">
-                              <div class="text-xl text-cyan-300 font-bold num" x-text="v.price||''"></div>
-                              <span class="pill mt-1 inline-block num" :class="recPill(v.recommendation)" x-text="(v.recommendation||'')+(v.score!=null?' · '+v.score:'')"></span>
+                            <div class="flex items-center gap-3 shrink-0">
+                              <div class="text-right">
+                                <div class="text-xl text-cyan-300 font-bold num" x-text="v.price||''"></div>
+                                <span class="pill mt-1 inline-block" :class="recPill(v.recommendation)" x-text="v.recommendation||''"></span>
+                                <span x-show="v.source_site" class="pill mt-1 inline-block ml-1" :class="siteCls(v.source_site)" x-text="v.source_site"></span>
+                              </div>
+                              <!-- overall match-score ring -->
+                              <div class="relative shrink-0" style="width:58px;height:58px" title="Overall match score">
+                                <svg width="58" height="58" viewBox="0 0 36 36" class="block">
+                                  <circle cx="18" cy="18" r="15.9155" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="3.4"></circle>
+                                  <circle cx="18" cy="18" r="15.9155" fill="none" :stroke="ringColor(v.score)" stroke-width="3.4" stroke-linecap="round"
+                                          :stroke-dasharray="(v.score||0)+', 100'" transform="rotate(-90 18 18)"></circle>
+                                </svg>
+                                <div class="absolute inset-0 grid place-items-center font-bold num text-[15px]" :class="ringText(v.score)" x-text="(v.score!=null?v.score:'–')"></div>
+                              </div>
                             </div>
                           </div>
                           <div class="grid sm:grid-cols-2 gap-x-5 gap-y-2.5 mt-4">
@@ -543,6 +555,8 @@ function chat(){
       {k:'specification',s:'Spec',full:'Specification',c:'#c084fc'},
     ],
     recPill(r){ return r==='Preferred'?'bg-emerald-500/15 text-emerald-300':r==='Consider'?'bg-amber-500/15 text-amber-300':'bg-rose-500/15 text-rose-300'; },
+    ringColor(s){ s=s||0; return s>=80?'#34d399':s>=60?'#22d3ee':s>=40?'#fbbf24':'#f87171'; },
+    ringText(s){ s=s||0; return s>=80?'text-emerald-300':s>=60?'text-cyan-300':s>=40?'text-amber-300':'text-rose-300'; },
     topFactors(v){ return this.dims.map(d=>({d, s:this.cmpScore(v,d.k)})).filter(x=>x.s>0).sort((a,b)=>b.s-a.s).slice(0,3); },
     others(m){ return (m.report.vendors||[]).map((v,i)=>({v,i})).filter(o=>!(m.compare||[]).includes(o.i)); },
     openDetail(m,i){ m.detail = (m.detail===i ? null : i); },
@@ -657,7 +671,7 @@ function chat(){
         const mm=this.messages[i];
         if(mm.role==='assistant' && mm.report && (mm.report.vendors||[]).length){
           let q=mm.report.query; if(!q){ const prev=this.messages[i-1]; q=prev&&prev.role==='user'?prev.text:''; }
-          searches.push({query:q, vendors:(mm.report.vendors||[]).slice(0,6).map(v=>({name:v.name,price:v.price,location:v.location,score:v.score,recommendation:v.recommendation,url:v.url}))});
+          searches.push({query:q, sites:mm.report.sites||[], vendors:(mm.report.vendors||[]).slice(0,6).map(v=>({name:v.name,price:v.price,location:v.location,score:v.score,recommendation:v.recommendation,url:v.url,source_site:v.source_site}))});
         }
       }
       if(!searches.length){ alert('Run at least one search first — then I can combine them.'); return; }

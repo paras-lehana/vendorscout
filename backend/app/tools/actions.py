@@ -21,14 +21,17 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 # The planner observes the page as an accessibility tree whose lines look like
-# "- link: 3 Star Split AC Hitachi 1.5 Ton…". It sometimes echoes that label
-# back as a selector ("link:3 Star Split AC…"), which Playwright cannot parse
-# ("Unexpected token") and the step hard-fails. Translate that shape into a
-# forgiving Playwright text= selector; leave real CSS/text=/role=/xpath alone.
+# "- link: 3 Star Split AC Hitachi 1.5 Ton…" or "- textbox: Enter product…". It
+# sometimes echoes that label back as a selector ("link:3 Star Split AC…"), which
+# Playwright cannot parse ("Unexpected token") and the step hard-fails. Translate
+# that shape: input-ish roles → the Playwright role engine (text= can NOT match an
+# input's placeholder); content roles → a forgiving text= selector. Real
+# CSS/text=/role=/xpath selectors are left untouched.
 _A11Y_LABEL = re.compile(
-    r"^\s*[-*]?\s*(?:link|button|textbox|combobox|checkbox|heading|text|img|image|"
+    r"^\s*[-*]?\s*(link|button|textbox|combobox|checkbox|heading|text|img|image|"
     r"tab|menuitem|option|radio|searchbox|cell|row|listitem|paragraph|generic)"
     r"\s*:\s*(.+)$", re.I)
+_INPUT_ROLES = {"textbox", "searchbox", "combobox", "checkbox", "radio", "option"}
 
 
 def _normalize_selector(sel: Optional[str]) -> Optional[str]:
@@ -39,9 +42,13 @@ def _normalize_selector(sel: Optional[str]) -> Optional[str]:
         return s
     m = _A11Y_LABEL.match(s)
     if m:
-        name = m.group(1).strip().strip("\"'")
-        # Only treat as a human label (not a CSS pseudo like button:hover) when
-        # it actually reads like one — has a space/comma or is fairly long.
+        role = m.group(1).lower()
+        name = m.group(2).strip().strip("\"'")
+        if role in _INPUT_ROLES:
+            # text= can't target an input by placeholder; use the role engine.
+            return f"role={role}"
+        # Content roles: only treat as a human label (not a CSS pseudo like
+        # button:hover) when it actually reads like one — space/comma or long.
         if " " in name or "," in name or len(name) > 15:
             return "text=" + name[:80]
     return s

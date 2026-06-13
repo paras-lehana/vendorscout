@@ -51,16 +51,85 @@ PLAN_SYS = (
     '"search_query":"the exact text to type into a B2B marketplace search box"}'
 )
 
+# The 9 evaluation dimensions VendorScout claims (keep this order everywhere).
+DIMENSIONS = ["relevance", "compliance", "financial", "risk", "authenticity",
+              "reputation", "capability", "price", "specification"]
+
 SCORE_SYS = (
-    "You are a procurement analyst. Given a buyer requirement and a list of suppliers "
-    "scraped live from a B2B marketplace, score and rank them. Return ONLY JSON: "
-    '{"summary":"2-3 sentence recommendation for the buyer",'
-    '"vendors":[{"name":..,"product":..,"price":..,"location":..,'
+    "You are VendorScout, a procurement analyst. You are given a buyer requirement and suppliers "
+    "scraped live from an Indian B2B marketplace (IndiaMART), each with an `available` map telling "
+    "you which of the 9 evaluation dimensions are actually evidenced in that listing.\n"
+    "Score and rank RELATIVELY across THIS set (not absolute): the best price in the set scores ~100 "
+    "on price, the most complete specs ~100 on specification, etc. Spread scores so the best options "
+    "stand out — never bunch everyone at 30-40.\n"
+    "HONESTY (critical): For a dimension, set verifiable=true and a numeric score ONLY if `available` "
+    "says so. For dimensions with no evidence in the listing (typically compliance, financial, risk, "
+    "reputation, capability), set verifiable=false, score=null, and note=\"Not shown on listing — verify "
+    "on supplier visit\". NEVER invent certifications, turnover, ratings, or capacity.\n"
+    "Return ONLY JSON:\n"
+    '{"executive_summary":"3 crisp plain-language lines: the best pick, why, and the price spread",'
+    '"vendors":[{"name":..,"product":..,"price":..,"location":..,"url":..,'
     '"score":0-100,"recommendation":"Preferred|Consider|Caution",'
-    '"reasons":["<=3 short match reasons"]}]}. '
-    "Rank best-fit first. Base scores on relevance to the requirement, price competitiveness, "
-    "and any credibility signals present. Do NOT invent suppliers — only use the provided list."
+    '"highlights":["3-5 measurable factors, <=10 words each"],'
+    '"evidence":{"relevance":{"score":0-100|null,"note":"<=10 words","verifiable":true|false,"where":"short source|null"},'
+    '"compliance":{...},"financial":{...},"risk":{...},"authenticity":{...},"reputation":{...},'
+    '"capability":{...},"price":{...},"specification":{...}}}]}\n'
+    "Copy name/product/price/location/url EXACTLY from the input. Rank best overall first. "
+    "`where` is a short pointer like 'Listing title', 'Listed price', 'Spec sheet', 'IndiaMART product page'."
 )
+
+ASK_SYS = (
+    "You are VendorScout's analyst answering a buyer's follow-up question about ONE sourcing report. "
+    "Use ONLY the provided report (ranked vendors, per-dimension evidence, scores) and the raw scraped "
+    "listings. Explain WHY a score/rank is what it is when asked, citing the evidence. Be crisp (2-5 "
+    "sentences, lists ok). If the answer isn't in the data, say so plainly and, if useful, suggest a "
+    "fresh/deeper scrape — do NOT invent certifications, prices, ratings, or financials."
+)
+
+
+def _evidence_availability(v: dict) -> dict:
+    """Deterministically decide which of the 9 dimensions are actually evidenced
+    by an IndiaMART catalog listing — so the LLM cannot over-claim verifiability."""
+    specs = v.get("specs") or {}
+    has_specs = bool(specs) or any(c.isdigit() for c in str(v.get("product", "")))
+    return {
+        "relevance": {"verifiable": True, "where": "Listing title"},
+        "price": {"verifiable": _has_price(v), "where": "Listed price"},
+        "specification": {"verifiable": has_specs, "where": "Listing spec sheet"},
+        "authenticity": {"verifiable": _is_indiamart_product_url(v.get("url")),
+                         "where": "IndiaMART product page"},
+        "compliance": {"verifiable": False, "where": None},
+        "financial": {"verifiable": False, "where": None},
+        "risk": {"verifiable": False, "where": None},
+        "reputation": {"verifiable": False, "where": None},
+        "capability": {"verifiable": False, "where": None},
+    }
+
+
+def _enforce_honesty(report: dict, raw_vendors: list[dict]) -> dict:
+    """Post-process the LLM report: clamp verifiable flags to what the listing
+    actually supports, and guarantee a clickable source url per vendor."""
+    by_name = {str(x.get("name", "")).strip().lower(): x for x in raw_vendors}
+    for v in report.get("vendors", []):
+        src = by_name.get(str(v.get("name", "")).strip().lower(), {})
+        if src.get("url") and not v.get("url"):
+            v["url"] = src["url"]
+        avail = _evidence_availability(src or v)
+        ev = v.get("evidence") or {}
+        fixed = {}
+        for dim in DIMENSIONS:
+            cell = ev.get(dim) or {}
+            ok = avail.get(dim, {}).get("verifiable", False)
+            if not ok:  # listing has no evidence → force honest "not shown"
+                fixed[dim] = {"score": None, "verifiable": False, "where": None,
+                              "note": cell.get("note") or "Not shown on listing — verify on supplier visit"}
+            else:
+                fixed[dim] = {"score": cell.get("score"),
+                              "verifiable": True,
+                              "where": cell.get("where") or avail[dim]["where"],
+                              "note": (cell.get("note") or "")[:80]}
+        v["evidence"] = fixed
+    return report
 
 
 async def _emit(q: asyncio.Queue, run_id: str, ev: dict):
@@ -73,6 +142,20 @@ async def _emit(q: asyncio.Queue, run_id: str, ev: dict):
 def _has_price(v: dict) -> bool:
     p = str(v.get("price") or "")
     return any(c.isdigit() for c in p)
+
+
+def _is_indiamart_product_url(url) -> bool:
+    """A REAL, clickable IndiaMART listing URL (so a buyer can verify the product)
+    — not a planner-hallucinated slug. Catalog parses these from actual HTML."""
+    u = str(url or "").lower()
+    return "indiamart.com/proddetail" in u or "indiamart.com/impcat" in u
+
+
+def _real_urls(vendors) -> bool:
+    if not isinstance(vendors, list) or not vendors:
+        return False
+    return sum(1 for v in vendors if isinstance(v, dict)
+               and _is_indiamart_product_url(v.get("url"))) >= max(2, len(vendors) // 2)
 
 
 # Generic names the planner invents when it can't read real ones ("Supplier A",
@@ -136,37 +219,60 @@ async def _run_scout(run_id: str, req: ScoutRequest):
         # extraction isn't usable, fall back to REAL IndiaMART catalog data fetched
         # from its SEO pages (reliable), then to a real captured sample as a last
         # resort — so the chat never shows "0 suppliers". All paths are real data.
-        source = "live"
-        if not _usable(vendors):
-            await _emit(q, run_id, {"type": "PHASE", "phase": "scout",
-                                    "message": "Pulling verified suppliers from IndiaMART's catalog…"})
-            seo = await fetch_seo_suppliers(search_query, req.max_vendors)
-            if seo:
-                vendors, source = seo, "catalog"
-            else:
-                seed = load_seed_suppliers(search_query, req.max_vendors)
-                if seed:
-                    vendors, source = seed, "sample"
+        # The browser run above is the live THEATER. For the actual REPORT we use the
+        # most TRUSTWORTHY source, because IndiaMART's JS search is anti-bot: it serves
+        # the headless browser a skeleton (no prices) OR the planner returns
+        # plausible-but-FAKE names/URLs. So we treat IndiaMART's live catalog/SEO fetch
+        # (real `proddetail` URLs a buyer can click & verify) as authoritative, then a
+        # browser run ONLY if its URLs are genuinely IndiaMART links, then a real seed.
+        browser_vendors = vendors
+        await _emit(q, run_id, {"type": "STEP",
+                                "thought": "Cross-checking IndiaMART's live catalog for verified, clickable listings…"})
+        await _emit(q, run_id, {"type": "PHASE", "phase": "scout",
+                                "message": "Verifying suppliers against IndiaMART's catalog…"})
+        vendors, source = [], "live"
+        catalog = await fetch_seo_suppliers(search_query, req.max_vendors)
+        if catalog:
+            vendors, source = catalog, "catalog"
+        elif _usable(browser_vendors) and _real_urls(browser_vendors):
+            vendors, source = browser_vendors, "live"
+        else:
+            seed = load_seed_suppliers(search_query, req.max_vendors)
+            if seed:
+                vendors, source = seed, "sample"
+            elif browser_vendors:
+                vendors, source = browser_vendors, "live"  # degraded: shown, source flagged
         st["raw_vendors"] = vendors
         st["source"] = source
+        if vendors:
+            sample = ", ".join(str(v.get("name", "")) for v in vendors[:3] if v.get("name"))
+            await _emit(q, run_id, {"type": "STEP",
+                                    "thought": f"Found {len(vendors)} suppliers (e.g. {sample}) — reading prices, specs & locations."})
         await _emit(q, run_id, {"type": "SCOUTED", "count": len(vendors), "source": source})
 
-        # ---- 3. SCORE ----
-        report = {"summary": "", "vendors": [], "query": req.query, "parsed": parsed,
-                  "source": source}
+        # ---- 3. SCORE (relative, evidence-based across the 9 dimensions) ----
+        report = {"summary": "", "executive_summary": "", "vendors": [],
+                  "query": req.query, "parsed": parsed, "source": source,
+                  "dimensions": DIMENSIONS}
         if vendors:
             await _emit(q, run_id, {"type": "PHASE", "phase": "score",
-                                    "message": f"Scoring & ranking {len(vendors)} suppliers…"})
+                                    "message": f"Comparing {len(vendors)} suppliers across 9 checks…"})
+            await _emit(q, run_id, {"type": "STEP",
+                                    "thought": "Scoring relatively: relevance, price & specs are read from the listing; compliance/financial/risk need a supplier visit."})
+            # Attach deterministic availability so the model can't over-claim.
+            enriched = [{**v, "available": _evidence_availability(v)} for v in vendors]
             scored = await _llm.generate_structured(
                 prompt=(f"Buyer requirement: {json.dumps(parsed)}\n\nQuery: {req.query}\n\n"
-                        f"Suppliers scraped live:\n{json.dumps(vendors)[:6000]}"),
+                        f"Suppliers (with `available` evidence flags):\n{json.dumps(enriched)[:9000]}"),
                 system_prompt=SCORE_SYS) or {}
-            report["summary"] = scored.get("summary", "")
-            report["vendors"] = scored.get("vendors", vendors)
+            report["executive_summary"] = scored.get("executive_summary", "")
+            report["summary"] = scored.get("executive_summary", "")  # back-compat
+            report["vendors"] = scored.get("vendors") or vendors
+            report = _enforce_honesty(report, vendors)
         else:
-            report["summary"] = ("No suppliers could be extracted for this query. Try a more specific "
-                                 "product name (e.g. 'Hitachi 1.5 ton split AC').")
-            report["vendors"] = []
+            report["executive_summary"] = report["summary"] = (
+                "No suppliers could be extracted for this query. Try a more specific "
+                "product name (e.g. 'Hitachi 1.5 ton split AC').")
 
         st["status"] = "completed"
         st["report"] = report
@@ -227,3 +333,30 @@ async def scout_status(run_id: str):
     if not st:
         return JSONResponse({"error": "unknown run_id"}, status_code=404)
     return {"run_id": run_id, "status": st["status"], "query": st["query"], "report": st.get("report")}
+
+
+class AskRequest(BaseModel):
+    question: str
+
+
+@router.post("/{run_id}/ask")
+async def ask_scout(run_id: str, body: AskRequest):
+    """Answer a buyer's follow-up about THIS report at runtime, grounded in the
+    stored reasoning (ranked vendors + per-dimension evidence + raw listings)."""
+    st = _RUNS.get(run_id)
+    if not st or not st.get("report"):
+        return JSONResponse({"error": "unknown or incomplete run_id"}, status_code=404)
+    report = st["report"]
+    context = {
+        "query": report.get("query"),
+        "requirement": report.get("parsed"),
+        "data_source": report.get("source"),
+        "executive_summary": report.get("executive_summary"),
+        "ranked_vendors": report.get("vendors"),
+        "raw_listings": st.get("raw_vendors", []),
+    }
+    answer = await _llm.generate_text(
+        prompt=(f"REPORT DATA (JSON):\n{json.dumps(context)[:11000]}\n\n"
+                f"Buyer question: {body.question.strip()}\n\nAnswer:"),
+        system_prompt=ASK_SYS) or "Sorry — I couldn't answer that from this report."
+    return {"answer": answer}

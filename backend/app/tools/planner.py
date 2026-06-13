@@ -55,6 +55,10 @@ Set "done": true (and "actions": []) ONLY when the goal is fully achieved; put t
 
 ## SELECTOR RULES
 - Prefer robust selectors: ids, name=, aria-label, Playwright text engine ("text=Send Enquiry"), role-based.
+- INPUTS / SEARCH BOXES: `text=` matches VISIBLE text, NOT placeholder text — never target an input by its
+  placeholder via text=. Use the role instead: `role=searchbox`, `role=combobox`, or `role=textbox`
+  (a snapshot line "- textbox: Enter product / service to search" → selector `role=textbox`), or a
+  `[placeholder="…"]` / `#id` / `[name="…"]` CSS selector. e.g. fill {"selector":"role=searchbox","value":"…"}.
 - Avoid brittle deep CSS chains. If the page changed since last step, re-read the snapshot and adapt.
 - After a click that loads/AJAXes, add a wait (until=selector or idle) before extracting.
 - A selector is NOT the snapshot line. The snapshot shows accessibility lines like

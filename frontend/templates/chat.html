@@ -105,30 +105,100 @@
                 <!-- final report card (inline, compact, no page scroll) -->
                 <template x-if="m.report">
                   <div class="glass rounded-2xl p-4">
-                    <div class="flex items-center gap-2 mb-2">
+                    <!-- header + data-source provenance -->
+                    <div class="flex items-center gap-2 mb-2 flex-wrap">
                       <span class="text-emerald-300 font-semibold">✓ Sourced <span x-text="m.report.vendors.length"></span> suppliers</span>
-                      <span class="text-[11px] text-slate-500" x-text="m.meta"></span>
+                      <span class="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-slate-300"
+                            x-text="srcLabel(m.report.source)" :title="'Data source: '+(m.report.source||'')"></span>
+                      <span class="ml-auto text-[11px] text-slate-500" x-text="m.meta"></span>
                     </div>
-                    <p class="text-sm text-slate-300 mb-3" x-text="m.report.summary"></p>
+
+                    <!-- executive summary (the jist) -->
+                    <div class="rounded-xl bg-indigo-500/10 border border-indigo-400/20 px-3 py-2 mb-3">
+                      <div class="text-[10px] uppercase tracking-wide text-indigo-300 mb-0.5">Executive summary</div>
+                      <p class="text-sm text-slate-200 leading-snug" x-text="m.report.executive_summary || m.report.summary"></p>
+                      <div class="text-[10px] text-slate-500 mt-1.5 flex items-center gap-2 flex-wrap">
+                        <span class="inline-flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-emerald-400"></span>strong &amp; verified</span>
+                        <span class="inline-flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-amber-400"></span>weaker</span>
+                        <span class="inline-flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-slate-600/60"></span>needs supplier visit</span>
+                        <span>· bars = 9-point strength</span>
+                      </div>
+                    </div>
+
+                    <!-- ranked suppliers -->
                     <div class="space-y-2">
                       <template x-for="(v,i) in m.report.vendors" :key="i">
-                        <div class="rounded-xl border border-white/10 bg-slate-900/40 px-3 py-2">
+                        <div class="rounded-xl border border-white/10 bg-slate-900/40 px-3 py-2" x-data="{open:false}">
                           <div class="flex items-center gap-2 flex-wrap">
                             <span class="text-slate-500 text-xs" x-text="'#'+(i+1)"></span>
                             <span class="font-semibold text-slate-100" x-text="v.name"></span>
                             <span class="text-xs px-2 py-0.5 rounded-full"
                                   :class="v.recommendation==='Preferred' ? 'bg-emerald-500/15 text-emerald-300' : (v.recommendation==='Consider' ? 'bg-amber-500/15 text-amber-300' : 'bg-rose-500/15 text-rose-300')"
-                                  x-text="(v.recommendation||'')+ (v.score!=null ? ' · '+v.score : '')"></span>
+                                  x-text="(v.recommendation||'')+ (v.score!=null ? ' · '+v.score+'/100' : '')"></span>
                             <span class="ml-auto text-cyan-300 font-semibold text-sm" x-text="v.price || ''"></span>
                           </div>
-                          <div class="text-xs text-slate-400 mt-0.5" x-text="[v.product, v.location].filter(Boolean).join(' · ')"></div>
+                          <div class="text-xs text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
+                            <span x-text="[v.product, v.location].filter(Boolean).join(' · ')"></span>
+                            <a x-show="v.url" :href="v.url" target="_blank" rel="noopener"
+                               class="text-cyan-400 hover:text-cyan-300 underline decoration-dotted">View on IndiaMART ↗</a>
+                          </div>
+                          <!-- crisp measurable highlights -->
                           <div class="flex flex-wrap gap-1 mt-1.5">
-                            <template x-for="(r,ri) in (v.reasons||[])" :key="ri">
+                            <template x-for="(r,ri) in (v.highlights||v.reasons||[])" :key="ri">
                               <span class="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-slate-300" x-text="r"></span>
+                            </template>
+                          </div>
+                          <!-- 9-feature STRENGTH METER (at-a-glance equalizer) -->
+                          <div class="mt-2 flex items-end gap-2">
+                            <div class="flex items-end gap-1 h-9 flex-1">
+                              <template x-for="d in dims" :key="'b'+d.k">
+                                <div class="flex-1 flex flex-col items-center gap-0.5" :title="evTip(v,d.k)">
+                                  <div class="w-full bg-white/5 rounded-sm flex items-end" style="height:26px">
+                                    <div class="w-full rounded-sm" :class="dimColor(v,d.k)" :style="'height:'+dimPct(v,d.k)+'%'"></div>
+                                  </div>
+                                  <span class="text-[8px] leading-none"
+                                        :class="(v.evidence&&v.evidence[d.k]&&v.evidence[d.k].verifiable)?'text-slate-400':'text-slate-600'"
+                                        x-text="d.s"></span>
+                                </div>
+                              </template>
+                            </div>
+                            <button @click="open=!open" class="text-[10px] text-cyan-400 hover:text-cyan-300 shrink-0" x-text="open?'Hide':'Details'"></button>
+                          </div>
+                          <!-- expandable per-dimension score bars + reasoning -->
+                          <div x-show="open" x-cloak class="mt-2 border-t border-white/10 pt-2 space-y-1.5">
+                            <template x-for="d in dims" :key="'r'+d.k">
+                              <div class="text-[11px] flex items-center gap-2" x-show="v.evidence && v.evidence[d.k]">
+                                <span class="w-20 shrink-0"
+                                      :class="v.evidence[d.k].verifiable?'text-emerald-300':'text-slate-500'" x-text="d.full"></span>
+                                <div class="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden min-w-[40px]">
+                                  <div class="h-full rounded-full" :class="dimColor(v,d.k)" :style="'width:'+(v.evidence[d.k].verifiable&&v.evidence[d.k].score!=null?v.evidence[d.k].score:0)+'%'"></div>
+                                </div>
+                                <span class="w-32 shrink-0 text-slate-400 truncate"
+                                      :title="(v.evidence[d.k].note||'')+(v.evidence[d.k].where?' — '+v.evidence[d.k].where:'')"
+                                      x-text="v.evidence[d.k].verifiable ? ((v.evidence[d.k].score!=null?v.evidence[d.k].score+' · ':'')+(v.evidence[d.k].where||'')) : 'verify on visit'"></span>
+                              </div>
                             </template>
                           </div>
                         </div>
                       </template>
+                    </div>
+
+                    <!-- ask-the-report (runtime Q&A grounded in stored reasoning) -->
+                    <div class="mt-3 border-t border-white/10 pt-3">
+                      <div class="text-[10px] uppercase tracking-wide text-slate-500 mb-1">Question this report</div>
+                      <template x-for="(qa,qi) in (m.qa||[])" :key="qi">
+                        <div class="mb-2">
+                          <div class="text-xs text-indigo-300">Q: <span x-text="qa.q"></span></div>
+                          <div class="text-xs text-slate-300 whitespace-pre-line" x-text="qa.a || (qa.loading?'…thinking':'')"></div>
+                        </div>
+                      </template>
+                      <form @submit.prevent="ask(m)" class="flex gap-2 mt-1">
+                        <input x-model="m.ask" :disabled="m.asking" type="text"
+                               placeholder="e.g. Why is #1 ranked above #3? What's verified vs not?"
+                               class="flex-1 bg-slate-900/60 border border-white/10 rounded-lg px-3 py-1.5 text-xs outline-none text-slate-200 placeholder-slate-600"/>
+                        <button type="submit" :disabled="m.asking || !(m.ask||'').trim()"
+                                class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-900 bg-gradient-to-r from-indigo-400 to-cyan-400 disabled:opacity-40">Ask</button>
+                      </form>
                     </div>
                   </div>
                 </template>
@@ -168,6 +238,17 @@ function chat(){
       "Industrial RO membrane suppliers in India",
       "LED driver 36W manufacturers with prices",
     ],
+    dims:[
+      {k:'relevance',s:'Rel',full:'Relevance'},{k:'compliance',s:'Comp',full:'Compliance'},
+      {k:'financial',s:'Fin',full:'Financial'},{k:'risk',s:'Risk',full:'Risk'},
+      {k:'authenticity',s:'Auth',full:'Authenticity'},{k:'reputation',s:'Rep',full:'Reputation'},
+      {k:'capability',s:'Cap',full:'Capability'},{k:'price',s:'Price',full:'Price'},
+      {k:'specification',s:'Spec',full:'Specification'},
+    ],
+    srcLabel(s){ return s==='live'?'🟢 Live scrape':s==='catalog'?'📚 IndiaMART catalog':s==='sample'?'🗂 Real sample':'source'; },
+    evTip(v,k){ const e=v.evidence&&v.evidence[k]; if(!e) return k; return (e.verifiable?'Seen in listing':'Not on listing — verify on supplier visit')+(e.note?': '+e.note:''); },
+    dimPct(v,k){ const e=v.evidence&&v.evidence[k]; if(!e||!e.verifiable) return 8; const s=(e.score==null?60:e.score); return Math.max(12,Math.min(100,s)); },
+    dimColor(v,k){ const e=v.evidence&&v.evidence[k]; if(!e||!e.verifiable) return 'bg-slate-600/40'; const s=(e.score==null?60:e.score); return s>=75?'bg-emerald-400':s>=50?'bg-cyan-400':'bg-amber-400'; },
     init(){
       try{ this.sessions = JSON.parse(localStorage.getItem('vs:sessions')||'[]'); }catch{ this.sessions=[]; }
       if(window.innerWidth < 768) this.sidebarOpen=false;
@@ -193,13 +274,14 @@ function chat(){
       this.input=""; this.busy=true;
       if(!this.currentId){ this.currentId='s'+Math.abs(Date.now()|0)+Math.floor(performance.now()); this.sessions.unshift({id:this.currentId,title:q.slice(0,40),messages:[]}); }
       this.messages.push({role:'user',text:q});
-      this.messages.push({role:'assistant',running:true,phaseMsg:'Starting…',frame:null,currentUrl:'',steps:[],report:null,error:null,meta:''});
+      this.messages.push({role:'assistant',running:true,phaseMsg:'Starting…',frame:null,currentUrl:'',steps:[],report:null,error:null,meta:'',runId:null,qa:[],ask:'',asking:false});
       // IMPORTANT: mutate the reactive proxy element (not the raw object) so Alpine re-renders.
       const m=this.messages[this.messages.length-1];
       this.persist(); this.scrollDown();
       let r;
       try{ r=await (await fetch('/api/scout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q})})).json(); }
       catch(e){ m.running=false; m.error='Could not start: '+e; this.busy=false; this.persist(); return; }
+      m.runId=r.run_id;
       const es=new EventSource(r.stream_url);
       es.onmessage=(msg)=>{
         let ev; try{ ev=JSON.parse(msg.data); }catch{ return; }
@@ -213,6 +295,17 @@ function chat(){
         else if(t==='END'){ m.running=false; this.busy=false; es.close(); this.persist(); this.scrollDown(); }
       };
       es.onerror=()=>{ if(m.running){ /* keep waiting; SSE may reconnect */ } };
+    },
+    async ask(m){
+      const qn=(m.ask||'').trim(); if(!qn||m.asking||!m.runId) return;
+      m.ask=''; m.asking=true;
+      if(!m.qa) m.qa=[];
+      const idx=m.qa.length; m.qa.push({q:qn,a:'',loading:true}); this.scrollDown();
+      try{
+        const res=await (await fetch('/api/scout/'+m.runId+'/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:qn})})).json();
+        m.qa[idx].a = res.answer || '(no answer)';
+      }catch(e){ m.qa[idx].a='Could not answer: '+e; }
+      m.qa[idx].loading=false; m.asking=false; this.persist(); this.scrollDown();
     },
   }
 }

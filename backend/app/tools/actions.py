@@ -13,11 +13,38 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
+
+# The planner observes the page as an accessibility tree whose lines look like
+# "- link: 3 Star Split AC Hitachi 1.5 Ton…". It sometimes echoes that label
+# back as a selector ("link:3 Star Split AC…"), which Playwright cannot parse
+# ("Unexpected token") and the step hard-fails. Translate that shape into a
+# forgiving Playwright text= selector; leave real CSS/text=/role=/xpath alone.
+_A11Y_LABEL = re.compile(
+    r"^\s*[-*]?\s*(?:link|button|textbox|combobox|checkbox|heading|text|img|image|"
+    r"tab|menuitem|option|radio|searchbox|cell|row|listitem|paragraph|generic)"
+    r"\s*:\s*(.+)$", re.I)
+
+
+def _normalize_selector(sel: Optional[str]) -> Optional[str]:
+    if not sel:
+        return sel
+    s = sel.strip()
+    if s.startswith(("text=", "role=", "xpath=", "css=", "//", "(")):
+        return s
+    m = _A11Y_LABEL.match(s)
+    if m:
+        name = m.group(1).strip().strip("\"'")
+        # Only treat as a human label (not a CSS pseudo like button:hover) when
+        # it actually reads like one — has a space/comma or is fairly long.
+        if " " in name or "," in name or len(name) > 15:
+            return "text=" + name[:80]
+    return s
 
 ActionType = Literal[
     "navigate", "fill", "click", "wait", "extract",
@@ -225,6 +252,9 @@ async def execute_action(page, a: Action, allow_submit: bool = True) -> ActionRe
     if fn is None:
         return ActionResult(action=a.action, status="skipped",
                             error="unknown_action_type")
+    # Repair accessibility-label-as-selector mistakes before anything touches the DOM.
+    if a.selector:
+        a.selector = _normalize_selector(a.selector)
     if not allow_submit and a.action in ("click", "press") and await _would_submit(page, a):
         logger.info("confirm-before-send: blocked submit-type %s on %r", a.action, a.selector)
         return ActionResult(action=a.action, status="skipped",

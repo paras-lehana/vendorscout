@@ -16,6 +16,7 @@
 import asyncio
 import json
 import logging
+import re
 import uuid
 
 from fastapi import APIRouter, Request
@@ -23,6 +24,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
 from app.tools.browser_agent import BrowserAgentClient
+from app.tools.indiamart_seo import fetch_seo_suppliers, load_seed_suppliers
 from app.tools.llm import LLMTool
 from app.config import settings
 
@@ -68,6 +70,35 @@ async def _emit(q: asyncio.Queue, run_id: str, ev: dict):
         pass
 
 
+def _has_price(v: dict) -> bool:
+    p = str(v.get("price") or "")
+    return any(c.isdigit() for c in p)
+
+
+# Generic names the planner invents when it can't read real ones ("Supplier A",
+# "Vendor 1", "Company B"). Treat these as NOT real — fall back to real data.
+_PLACEHOLDER_NAME = re.compile(
+    r"^(supplier|vendor|company|seller|manufacturer|distributor)\s+([a-z]|\d{1,2})$", re.I)
+
+
+def _looks_placeholder(name: str) -> bool:
+    n = (name or "").strip().lower()
+    return (not n) or n in {"unknown", "n/a", "na", "supplier", "vendor"} \
+        or bool(_PLACEHOLDER_NAME.match(name or ""))
+
+
+def _usable(vendors) -> bool:
+    """True only if the live browser extraction returned REAL suppliers — i.e.
+    at least 2 priced rows AND mostly real company names (not the anti-bot
+    skeleton, which has no prices, and not hallucinated 'Supplier A/B/C' names)."""
+    if not isinstance(vendors, list) or len(vendors) < 2:
+        return False
+    priced = sum(1 for v in vendors if isinstance(v, dict) and _has_price(v))
+    placeholder = sum(1 for v in vendors if isinstance(v, dict)
+                      and _looks_placeholder(str(v.get("name", ""))))
+    return priced >= 2 and placeholder <= len(vendors) // 2
+
+
 async def _run_scout(run_id: str, req: ScoutRequest):
     st = _RUNS[run_id]
     q: asyncio.Queue = st["queue"]
@@ -94,16 +125,35 @@ async def _run_scout(run_id: str, req: ScoutRequest):
             await _emit(q, run_id, ev)  # forward live browser STEP/FRAME/RECOVER frames
 
         result = await _browser.run_task_streaming(
-            url=MARKETPLACE_URL, goal=goal, on_update=on_update, timeout=180, max_steps=14)
+            url=MARKETPLACE_URL, goal=goal, on_update=on_update, timeout=120, max_steps=8)
         raw = result.extracted_data if isinstance(result.extracted_data, dict) else {}
         vendors = raw.get("vendors") or raw.get("suppliers") or []
         if not isinstance(vendors, list):
             vendors = []
+
+        # Hybrid resilience: IndiaMART's JS search is anti-bot protected and often
+        # serves the live browser a placeholder skeleton (no prices). When the live
+        # extraction isn't usable, fall back to REAL IndiaMART catalog data fetched
+        # from its SEO pages (reliable), then to a real captured sample as a last
+        # resort — so the chat never shows "0 suppliers". All paths are real data.
+        source = "live"
+        if not _usable(vendors):
+            await _emit(q, run_id, {"type": "PHASE", "phase": "scout",
+                                    "message": "Pulling verified suppliers from IndiaMART's catalog…"})
+            seo = await fetch_seo_suppliers(search_query, req.max_vendors)
+            if seo:
+                vendors, source = seo, "catalog"
+            else:
+                seed = load_seed_suppliers(search_query, req.max_vendors)
+                if seed:
+                    vendors, source = seed, "sample"
         st["raw_vendors"] = vendors
-        await _emit(q, run_id, {"type": "SCOUTED", "count": len(vendors)})
+        st["source"] = source
+        await _emit(q, run_id, {"type": "SCOUTED", "count": len(vendors), "source": source})
 
         # ---- 3. SCORE ----
-        report = {"summary": "", "vendors": [], "query": req.query, "parsed": parsed}
+        report = {"summary": "", "vendors": [], "query": req.query, "parsed": parsed,
+                  "source": source}
         if vendors:
             await _emit(q, run_id, {"type": "PHASE", "phase": "score",
                                     "message": f"Scoring & ranking {len(vendors)} suppliers…"})

@@ -1,0 +1,254 @@
+{
+  "_note": "REAL suppliers captured from IndiaMART catalog (dir.indiamart.com/impcat) on 2026-06-13. Last-resort fallback only.",
+  "categories": {
+    "hitachi air conditioner": [
+      {
+        "name": "A.S.Enterprises",
+        "company": "A.S.Enterprises",
+        "product": "Hitachi Space Maker AC, 1.5 Ton, 5 Star",
+        "price": "₹3,00,800",
+        "location": "New Delhi",
+        "url": "https://www.indiamart.com/proddetail/hitachi-space-maker-ac-2854052220233.html",
+        "specs": {
+          "Capacity": "1.5 Ton",
+          "Star Rating": "5 Star",
+          "Country of Origin": "Made in India",
+          "Brand": "Hitachi"
+        }
+      },
+      {
+        "name": "Ojus Enterprises",
+        "company": "Ojus Enterprises",
+        "product": "Hitachi Air Conditioner System",
+        "price": "₹21,500",
+        "location": "Mohali",
+        "url": "https://www.indiamart.com/proddetail/hitachi-air-conditioner-system-2855595121262.html",
+        "specs": {
+          "Capacity": "8.5 Ton",
+          "PCB Type": "Multi-Layer",
+          "Brand": "Hitachi",
+          "Star Rating": "2 Star"
+        }
+      },
+      {
+        "name": "Sakthi Cool Point",
+        "company": "Sakthi Cool Point",
+        "product": "Hitachi Air Conditioners Ridda Model, 3 Star, Coil Material: Copper",
+        "price": "₹35,200",
+        "location": "Chennai",
+        "url": "https://www.indiamart.com/proddetail/hitachi-air-conditioners-ridda-model-20263363612.html",
+        "specs": {
+          "Star Rating": "3 Star",
+          "Type": "Split AC",
+          "Coil Material": "Copper",
+          "Brand": "HITACHI"
+        }
+      },
+      {
+        "name": "Arihant Engineering Works",
+        "company": "Arihant Engineering Works",
+        "product": "1.5 Ton Hitachi Ryoku Indoor Unit",
+        "price": "₹10,000",
+        "location": "New Delhi",
+        "url": "https://www.indiamart.com/proddetail/1-5-ton-hitachi-ryoku-indoor-unit-25633137562.html",
+        "specs": {
+          "Star Rating": "3 Star",
+          "Coil Material": "Copper",
+          "Type": "Split AC",
+          "Brand": "Hitachi"
+        }
+      },
+      {
+        "name": "Well Air Home",
+        "company": "Well Air Home",
+        "product": "Hitachi Hi Wall Indoor Unit 2.5 HP, Coil Material: Copper",
+        "price": "₹19,800",
+        "location": "New Delhi",
+        "url": "https://www.indiamart.com/proddetail/hitachi-hi-wall-indoor-unit-2-5-hp-2848947345897.html",
+        "specs": {
+          "Coil Material": "Copper",
+          "Capacity": "7.1 KW",
+          "Model Name/Number": "RPK2.0FSNK2",
+          "Series": "Sigma Series"
+        }
+      },
+      {
+        "name": "Khushiraj Enterprise LLP",
+        "company": "Khushiraj Enterprise LLP",
+        "product": "Hitachi Air conditioners",
+        "price": "₹37,500",
+        "location": "Bopal, Ahmedabad",
+        "url": "https://www.indiamart.com/proddetail/hitachi-air-conditioners-2857873043355.html",
+        "specs": {
+          "Capacity": "1.5 Ton"
+        }
+      }
+    ],
+    "split air conditioner": [
+      {
+        "name": "Pravi Tech Solutions",
+        "company": "Pravi Tech Solutions",
+        "product": "Split Unit Air Conditioner, 2 Ton, 3 Star",
+        "price": "₹43,000",
+        "location": "Banaswadi, Bengaluru",
+        "url": "https://www.indiamart.com/proddetail/split-unit-air-conditioner-2855286066855.html",
+        "specs": {
+          "Capacity": "2 Ton",
+          "Star Rating": "3 Star",
+          "Coil Material": "copper",
+          "Auto Restart": "Yes"
+        }
+      },
+      {
+        "name": "National Engineers (india)",
+        "company": "National Engineers (india)",
+        "product": "Split Air Conditioners, 1 Ton, 3 Star",
+        "price": "₹35,000",
+        "location": "Royapettah, Chennai",
+        "url": "https://www.indiamart.com/proddetail/split-air-conditioners-2853597302055.html",
+        "specs": {
+          "Capacity": "1 Ton",
+          "Star Rating": "3 Star",
+          "Coil Material": "Copper",
+          "Country of Origin": "Made in India"
+        }
+      },
+      {
+        "name": "Amaflip India Private Limited",
+        "company": "Amaflip India Private Limited",
+        "product": "Split Air Conditioner 1.5 Ton",
+        "price": "₹38,000",
+        "location": "Ramgarh, Barwala, Dist. Panchkula",
+        "url": "https://www.indiamart.com/proddetail/split-air-conditioner-1-5-ton-2856093621188.html",
+        "specs": {
+          "Capacity": "1.5 Ton",
+          "Star Rating": "3 Star",
+          "Auto Restart": "Yes",
+          "On/Off Timer": "Yes"
+        }
+      },
+      {
+        "name": "A.S.Enterprises",
+        "company": "A.S.Enterprises",
+        "product": "BPL 5 Star Inverter Split AC",
+        "price": "₹35,400",
+        "location": "New Delhi",
+        "url": "https://www.indiamart.com/proddetail/bpl-5-star-inverter-split-ac-2854050139488.html",
+        "specs": {
+          "Capacity": "1.5 Ton",
+          "Star Rating": "5 Star",
+          "Model": "BAS-V195PBYG BPL",
+          "Brand": "BPL"
+        }
+      },
+      {
+        "name": "Crimson Communicare LLP",
+        "company": "Crimson Communicare LLP",
+        "product": "Panasonic AC 2 Ton 5 Star Wi-Fi Inverter Smart Split Air conditioners",
+        "price": "₹63,500",
+        "location": "Gurgaon, Gurugram",
+        "url": "https://www.indiamart.com/proddetail/panasonic-ac-2-ton-5-star-wi-fi-inverter-smart-split-air-conditioners-2856350055012.html",
+        "specs": {
+          "Capacity": "2 Ton",
+          "Star Rating": "5 Star"
+        }
+      },
+      {
+        "name": "Sky X Technology",
+        "company": "Sky X Technology",
+        "product": "2 Ton Split AC",
+        "price": "₹27,500",
+        "location": "Greater Noida, Dist. Gautam Buddha Nagar",
+        "url": "https://www.indiamart.com/proddetail/2-ton-split-ac-2855265289591.html",
+        "specs": {
+          "Capacity": "2.0 Ton",
+          "Star Rating": "5 Star",
+          "Brand": "Dilmin",
+          "Compressor Type": "Rotary"
+        }
+      }
+    ],
+    "air conditioner": [
+      {
+        "name": "A.S.Enterprises",
+        "company": "A.S.Enterprises",
+        "product": "Window AC Tata Voltas Air Conditioner, Coil Material: Copper, 4 Star",
+        "price": "₹28,900",
+        "location": "New Delhi",
+        "url": "https://www.indiamart.com/proddetail/voltas-window-air-conditioner-25474891697.html",
+        "specs": {
+          "Capacity": "1.5",
+          "Type": "Window AC",
+          "Star Rating": "4 Star",
+          "Coil Material": "Copper"
+        }
+      },
+      {
+        "name": "Amaflip India Private Limited",
+        "company": "Amaflip India Private Limited",
+        "product": "Ifb Air Conditioner",
+        "price": "₹31,800",
+        "location": "Ramgarh, Barwala, Dist. Panchkula",
+        "url": "https://www.indiamart.com/proddetail/ifb-air-conditioner-2858169688530.html",
+        "specs": {
+          "Capacity": "1.5 Ton",
+          "Star Rating": "Inverter 3 Star",
+          "AC Type": "Inverter Split",
+          "Cooling Capacity": "5000 W"
+        }
+      },
+      {
+        "name": "Crimson Communicare LLP",
+        "company": "Crimson Communicare LLP",
+        "product": "Daikin AC SPLIT 1 TON 3 STAR SPLIT AIR CONDITIONER. MTKL35UV Eq",
+        "price": "₹31,990",
+        "location": "Gurgaon, Gurugram",
+        "url": "https://www.indiamart.com/proddetail/daikin-ac-split-1-ton-3-star-split-air-conditioner-mtkl35uv-eq-2856344741197.html",
+        "specs": {
+          "Capacity": "1 Ton",
+          "Star Rating": "3 Star",
+          "Country of Origin": "Made in India"
+        }
+      },
+      {
+        "name": "Ojus Enterprises",
+        "company": "Ojus Enterprises",
+        "product": "Hitachi Air Conditioner System",
+        "price": "₹21,500",
+        "location": "Mohali",
+        "url": "https://www.indiamart.com/proddetail/hitachi-air-conditioner-system-2855595121262.html",
+        "specs": {
+          "Capacity": "8.5 Ton",
+          "PCB Type": "Multi-Layer",
+          "Brand": "Hitachi",
+          "Star Rating": "2 Star"
+        }
+      },
+      {
+        "name": "Sky X Technology",
+        "company": "Sky X Technology",
+        "product": "2 Ton Split Air Conditioner, 3 Star",
+        "price": "₹30,500",
+        "location": "Greater Noida, Dist. Gautam Buddha Nagar",
+        "url": "https://www.indiamart.com/proddetail/2-ton-split-air-conditioner-24392207355.html",
+        "specs": {
+          "Capacity": "2 ton",
+          "Star Rating": "3 Star",
+          "Model Name/Number": "OEM",
+          "Brand": "Dilmin"
+        }
+      },
+      {
+        "name": "Ecosun Cooling",
+        "company": "Ecosun Cooling",
+        "product": "Moseta Air Conditioner 1.5 Ton",
+        "price": "₹47,000",
+        "location": "Nagpur",
+        "url": "https://www.indiamart.com/proddetail/moseta-air-conditioner-1-5-ton-2858264110391.html",
+        "specs": {
+          "power consumption/hr": "0.5"
+        }
+      }
+    ]
+  }
+}

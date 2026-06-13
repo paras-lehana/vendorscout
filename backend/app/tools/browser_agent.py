@@ -190,8 +190,12 @@ class BrowserAgentClient:
             try:
                 async with self._new_page(url) as page:
                     await _emit(on_update, {"type": "STARTED", "runId": run_id, "url": url})
-                    # Initial navigation is the first action.
+                    # Initial navigation is the first action. Use domcontentloaded,
+                    # NOT networkidle: ad/analytics-heavy marketplaces (IndiaMART)
+                    # never go idle, so networkidle just times out and wastes a step.
                     await execute_action(page, Action(action="navigate", url=url,
+                                                       wait_until="domcontentloaded",
+                                                       timeout=30000,
                                                        continue_on_error=True))
 
                     for step in range(steps_budget):

@@ -11,10 +11,16 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     html,body{height:100%;margin:0}
-    :root{font-size:16px}
-    body{background:radial-gradient(1100px 500px at 75% -10%,#1e293b 0%,#0b1120 55%,#060912 100%);
+    :root{font-size:16px;
+          --bg:radial-gradient(1100px 500px at 75% -10%,#1e293b 0%,#0b1120 55%,#060912 100%);
+          --g1:#818cf8;--g2:#22d3ee;--g3:#34d399;--accent:#22d3ee}
+    /* dark theme variants (bg + accent gradient) */
+    [data-theme=sunset]{--bg:radial-gradient(1100px 500px at 75% -10%,#3b1e2e 0%,#180d12 55%,#0a0608 100%);--g1:#fb7185;--g2:#fbbf24;--g3:#f43f5e;--accent:#fb7185}
+    [data-theme=royal]{--bg:radial-gradient(1100px 500px at 75% -10%,#2a1e4d 0%,#130b28 55%,#080513 100%);--g1:#a78bfa;--g2:#818cf8;--g3:#e879f9;--accent:#a78bfa}
+    [data-theme=mono]{--bg:radial-gradient(1100px 500px at 75% -10%,#222834 0%,#0e1117 55%,#070809 100%);--g1:#94a3b8;--g2:#cbd5e1;--g3:#64748b;--accent:#94a3b8}
+    body{background:var(--bg);background-attachment:fixed;
          font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-         -webkit-font-smoothing:antialiased;letter-spacing:-0.005em}
+         -webkit-font-smoothing:antialiased;letter-spacing:-0.005em;transition:background .4s ease}
     /* tabular, slightly heavier figures so prices & scores read clearly */
     .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;font-weight:600}
     .glass{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}
@@ -29,7 +35,7 @@
     .vfill{height:100%;border-radius:3px;transition:width .4s ease}
     .fcard{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);border-radius:14px;transition:border-color .15s}
     .fcard:hover{border-color:rgba(255,255,255,.22)}
-    .fcard.sel{border-color:#22d3ee;box-shadow:inset 0 0 0 1px #22d3ee}
+    .fcard.sel{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
     .fcard.dim{opacity:.5}
     .mini{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);border-radius:12px;cursor:pointer;transition:border-color .15s}
     .mini:hover{border-color:rgba(255,255,255,.24)}
@@ -46,13 +52,36 @@
     @keyframes shimmer{0%{background-position:-450px 0}100%{background-position:450px 0}}
     .skel{background:linear-gradient(90deg,rgba(255,255,255,.045) 25%,rgba(255,255,255,.11) 37%,rgba(255,255,255,.045) 63%);background-size:900px 100%;animation:shimmer 1.4s linear infinite;border-radius:8px}
     @keyframes hue{0%{filter:hue-rotate(0)}100%{filter:hue-rotate(22deg)}}
-    .grad-anim{background:linear-gradient(90deg,#818cf8,#22d3ee,#34d399,#818cf8);background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:slide 6s linear infinite}
+    .grad-anim{background:linear-gradient(90deg,var(--g1),var(--g2),var(--g3),var(--g1));background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:slide 6s linear infinite}
     @keyframes slide{to{background-position:200% center}}
+    .btn-grad{background:linear-gradient(90deg,var(--g1),var(--g2),var(--g3));color:#0b1120}
     .chip-ex{transition:transform .12s ease,border-color .12s ease,background .12s ease}
-    .chip-ex:hover{transform:translateY(-2px);border-color:rgba(34,211,238,.5);background:rgba(34,211,238,.06)}
-    button,a,input,textarea{transition:filter .12s ease, background .12s ease, color .12s ease, border-color .12s ease}
+    .chip-ex:hover{transform:translateY(-2px);border-color:var(--accent);background:rgba(255,255,255,.05)}
+    button,a,input,textarea,select{transition:filter .12s ease, background .12s ease, color .12s ease, border-color .12s ease}
     .press:active{transform:translateY(1px)}
-    *:focus-visible{outline:2px solid rgba(34,211,238,.6);outline-offset:2px;border-radius:6px}
+    *:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+    /* ☀️ light theme — remap the dark Tailwind utilities used in the report */
+    [data-theme=light]{--bg:radial-gradient(1100px 600px at 78% -12%,#eef2ff 0%,#f5f7fb 45%,#eef1f6 100%);--g1:#6366f1;--g2:#0891b2;--g3:#059669;--accent:#0891b2}
+    [data-theme=light] body{color:#0f172a}
+    [data-theme=light] .glass{background:#ffffff;border-color:#e2e8f0;box-shadow:0 1px 3px rgba(15,23,42,.05)}
+    [data-theme=light] .fcard,[data-theme=light] .mini{background:#ffffff;border-color:#e2e8f0}
+    [data-theme=light] .fcard:hover,[data-theme=light] .mini:hover{border-color:#94a3b8;box-shadow:0 10px 24px -10px rgba(15,23,42,.25)}
+    [data-theme=light] .vbar{background:#e8edf3}
+    [data-theme=light] .scroll::-webkit-scrollbar-thumb{background:#cbd5e1}
+    [data-theme=light] aside{background:#f8fafc!important;border-color:#e2e8f0!important}
+    [data-theme=light] header{border-color:#e2e8f0!important}
+    [data-theme=light] footer{border-color:#e2e8f0!important;background:#f8fafc}
+    [data-theme=light] .text-slate-100,[data-theme=light] .text-slate-200{color:#0f172a!important}
+    [data-theme=light] .text-slate-300{color:#334155!important}
+    [data-theme=light] .text-slate-400{color:#475569!important}
+    [data-theme=light] .text-slate-500{color:#64748b!important}
+    [data-theme=light] .text-slate-600{color:#94a3b8!important}
+    [data-theme=light] .text-white{color:#0f172a!important}
+    [data-theme=light] .bg-slate-900\/40,[data-theme=light] .bg-slate-900\/60,[data-theme=light] .bg-slate-950\/60{background:#f1f5f9!important}
+    [data-theme=light] .border-white\/10,[data-theme=light] .border-white\/5{border-color:#e2e8f0!important}
+    [data-theme=light] .bg-white\/5{background:#f1f5f9!important}
+    [data-theme=light] .placeholder-slate-500::placeholder,[data-theme=light] .placeholder-slate-600::placeholder{color:#94a3b8}
+    [data-theme=light] .skel{background:linear-gradient(90deg,#eef2f7 25%,#e2e8f0 37%,#eef2f7 63%);background-size:900px 100%}
   </style>
 </head>
 <body class="text-slate-200">
@@ -62,7 +91,7 @@
   <aside class="shrink-0 h-full border-r border-white/10 bg-slate-950/60 backdrop-blur flex flex-col transition-all duration-200 overflow-hidden"
          :class="sidebarOpen ? 'w-72' : 'w-0'">
     <div class="p-3 flex flex-col h-full" x-show="sidebarOpen">
-      <button @click="newChat()" class="w-full mb-3 py-2 rounded-lg font-semibold text-slate-900 bg-gradient-to-r from-indigo-400 via-cyan-400 to-emerald-400">+ New sourcing chat</button>
+      <button @click="newChat()" class="w-full mb-3 py-2 rounded-lg font-semibold text-slate-900 btn-grad">+ New sourcing chat</button>
       <div class="text-[11px] uppercase tracking-wide text-slate-500 px-1 mb-1">Your sessions</div>
       <div class="flex-1 overflow-y-auto scroll space-y-1">
         <template x-for="s in sessions" :key="s.id">
@@ -92,7 +121,15 @@
       <div class="ml-auto flex items-center gap-3 text-sm">
         <a href="/learn" class="text-slate-400 hover:text-cyan-300 hidden sm:block">Learn</a>
         <a href="/theater" class="text-slate-400 hover:text-cyan-300 hidden sm:block">Theater</a>
-        <span class="chrome-dot bg-emerald-400"></span><span class="text-xs text-slate-400">live</span>
+        <select x-model="theme" @change="setTheme(theme)" title="Theme" aria-label="Theme"
+                class="bg-slate-900/60 border border-white/10 rounded-md text-xs px-2 py-1.5 text-slate-200 outline-none cursor-pointer">
+          <option value="aurora">🌌 Aurora</option>
+          <option value="sunset">🌇 Sunset</option>
+          <option value="royal">👑 Royal</option>
+          <option value="mono">⚙️ Mono</option>
+          <option value="light">☀️ Light</option>
+        </select>
+        <span class="chrome-dot bg-emerald-400"></span><span class="text-xs text-slate-400 hidden sm:inline">live</span>
       </div>
     </header>
 
@@ -383,7 +420,7 @@
                                placeholder="Ask this report — e.g. why is #1 above #3? what's verified?"
                                class="flex-1 bg-slate-900/60 border border-white/10 rounded-lg px-3 py-2 text-[13px] outline-none text-slate-200 placeholder-slate-500"/>
                         <button type="submit" :disabled="m.asking || !(m.ask||'').trim()"
-                                class="px-4 py-2 rounded-lg text-[13px] font-semibold text-slate-900 bg-gradient-to-r from-indigo-400 to-cyan-400 disabled:opacity-40">Ask</button>
+                                class="px-4 py-2 rounded-lg text-[13px] font-semibold btn-grad disabled:opacity-40">Ask</button>
                       </form>
                     </div>
                   </div>
@@ -433,7 +470,7 @@
                     placeholder="Describe what you want to source — e.g. Hitachi 1.5–2 ton ACs, bulk of 12, best price"
                     class="flex-1 bg-transparent resize-none outline-none text-slate-100 placeholder-slate-500 px-2 py-2 max-h-32"></textarea>
           <button type="submit" :disabled="busy || !input.trim()"
-                  class="px-4 py-2 rounded-xl font-semibold text-slate-900 bg-gradient-to-r from-indigo-400 via-cyan-400 to-emerald-400 disabled:opacity-40">
+                  class="px-4 py-2 rounded-xl font-semibold text-slate-900 btn-grad disabled:opacity-40">
             <span x-show="!busy">Source ▸</span><span x-show="busy">●●●</span>
           </button>
         </form>
@@ -446,7 +483,8 @@
 <script>
 function chat(){
   return {
-    sidebarOpen:true, sessions:[], currentId:null, messages:[], input:"", busy:false,
+    sidebarOpen:true, sessions:[], currentId:null, messages:[], input:"", busy:false, theme:'aurora',
+    setTheme(t){ this.theme=t||'aurora'; const el=document.documentElement; if(this.theme==='aurora') el.removeAttribute('data-theme'); else el.setAttribute('data-theme',this.theme); try{ localStorage.setItem('vs:theme',this.theme); }catch{} },
     examples:[
       "Hitachi 1.5–2 ton ACs, bulk of 12, best price",
       "Industrial RO membrane suppliers in India",
@@ -493,6 +531,7 @@ function chat(){
     cmpScore(v,k){ const e=v&&v.evidence&&v.evidence[k]; return (e&&e.verifiable&&e.score!=null)?Math.max(0,Math.min(100,e.score)):0; },
     cmpWinner(m,k){ const a=this.cmpScore(this.cmpA(m),k), b=this.cmpScore(this.cmpB(m),k); if(a===0&&b===0) return '—'; if(a===b) return '='; return a>b?'◀':'▶'; },
     init(){
+      try{ this.setTheme(localStorage.getItem('vs:theme')||'aurora'); }catch{}
       try{ this.sessions = JSON.parse(localStorage.getItem('vs:sessions')||'[]'); }catch{ this.sessions=[]; }
       if(window.innerWidth < 768) this.sidebarOpen=false;
       const last = localStorage.getItem('vs:current');

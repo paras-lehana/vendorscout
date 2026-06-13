@@ -60,6 +60,14 @@
     button,a,input,textarea,select{transition:filter .12s ease, background .12s ease, color .12s ease, border-color .12s ease}
     .press:active{transform:translateY(1px)}
     *:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+    /* live-run polish */
+    @keyframes indet{0%{left:-42%;width:42%}50%{width:58%}100%{left:100%;width:42%}}
+    .progress{position:relative;height:3px;background:rgba(255,255,255,.08);overflow:hidden}
+    .progress>i{position:absolute;top:0;height:100%;border-radius:3px;background:linear-gradient(90deg,var(--g1),var(--g2),var(--g3));animation:indet 1.15s ease-in-out infinite}
+    @keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
+    .dot3 i{display:inline-block;width:4px;height:4px;border-radius:50%;background:currentColor;margin:0 1px;animation:blink 1.2s infinite}
+    .dot3 i:nth-child(2){animation-delay:.16s}.dot3 i:nth-child(3){animation-delay:.32s}
+    .stepf{animation:fadeUp .25s ease both}
     /* ☀️ light theme — remap the dark Tailwind utilities used in the report */
     [data-theme=light]{--bg:radial-gradient(1100px 600px at 78% -12%,#eef2ff 0%,#f5f7fb 45%,#eef1f6 100%);--g1:#6366f1;--g2:#0891b2;--g3:#059669;--accent:#0891b2}
     [data-theme=light] body{color:#0f172a}
@@ -170,18 +178,30 @@
 
                 <!-- live working panel (while running) -->
                 <div x-show="m.running" class="glass rounded-2xl overflow-hidden">
-                  <div class="flex items-center gap-2 px-4 py-2 border-b border-white/10 bg-slate-900/40 text-xs">
+                  <div class="progress"><i></i></div>
+                  <div class="flex items-center gap-2 px-4 py-2.5 border-b border-white/10 bg-slate-900/40 text-[13px]">
                     <span class="chrome-dot bg-emerald-400 pulse"></span>
-                    <span class="text-slate-300" x-text="m.phaseMsg || 'Starting…'"></span>
-                    <span class="ml-auto text-slate-500" x-text="m.currentUrl"></span>
+                    <span class="text-slate-200 font-medium" x-text="m.phaseMsg || 'Starting…'"></span>
+                    <span class="dot3 text-cyan-300"><i></i><i></i><i></i></span>
+                    <span class="ml-auto text-slate-500 text-[11px] truncate max-w-[40%]" x-text="m.currentUrl"></span>
+                  </div>
+                  <!-- phase stepper -->
+                  <div class="flex items-center gap-1.5 px-4 py-2 border-b border-white/10 text-[11px]">
+                    <template x-for="(ph,pi) in [['plan','Plan'],['scout','Scout'],['score','Score'],['act','Act']]" :key="ph[0]">
+                      <span class="flex items-center gap-1.5">
+                        <span class="px-2 py-0.5 rounded-full border num" :class="phaseClass(m,ph[0])" x-text="ph[1]"></span>
+                        <span x-show="pi<3" class="text-slate-600">›</span>
+                      </span>
+                    </template>
                   </div>
                   <div class="relative bg-black/40" style="aspect-ratio:16/9" x-show="m.frame">
                     <img :src="m.frame" class="w-full h-full object-contain" alt="agent view"/>
                   </div>
-                  <div class="px-4 py-2 max-h-28 overflow-y-auto scroll space-y-1">
-                    <template x-for="(s,i) in (m.steps||[]).slice(-4)" :key="i">
-                      <div class="text-xs" :class="s.kind==='recover' ? 'text-amber-300':'text-slate-400'">
-                        <span x-text="s.kind==='recover' ? '↻ ' : '• '"></span><span x-text="s.text"></span>
+                  <div class="px-4 py-2.5 max-h-32 overflow-y-auto scroll space-y-1.5">
+                    <template x-for="(s,i) in (m.steps||[]).slice(-5)" :key="i">
+                      <div class="stepf text-[12.5px] flex items-start gap-2" :class="s.kind==='recover' ? 'text-amber-300':'text-slate-400'">
+                        <span class="shrink-0 mt-0.5" :class="s.kind==='recover'?'text-amber-400':'text-cyan-400'" x-text="s.kind==='recover' ? '↻' : '•'"></span>
+                        <span x-text="s.text"></span>
                       </div>
                     </template>
                   </div>
@@ -521,6 +541,10 @@ function chat(){
       const txt=lines.join('\n');
       (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>{m.copied=true; setTimeout(()=>m.copied=false,1600);}).catch(()=>{m.copied=false;});
     },
+    phaseOrder:{plan:0,scout:1,score:2,act:3},
+    phaseClass(m,k){ const cur=(this.phaseOrder[m.phase]!=null?this.phaseOrder[m.phase]:-1), ki=this.phaseOrder[k];
+      if((m.report && !m.running) || ki<cur) return 'border-emerald-400/40 text-emerald-300 bg-emerald-500/10';
+      if(ki===cur) return 'border-cyan-400/50 text-cyan-200 bg-cyan-500/10'; return 'border-white/10 text-slate-500'; },
     srcLabel(s){ return s==='live'?'🟢 Live scrape':s==='catalog'?'📚 IndiaMART catalog':s==='sample'?'🗂 Real sample':'source'; },
     evTip(v,k){ const e=v.evidence&&v.evidence[k]; if(!e) return k; return (e.verifiable?'Seen in listing':'Not on listing — verify on supplier visit')+(e.note?': '+e.note:''); },
     dimPct(v,k){ const e=v.evidence&&v.evidence[k]; if(!e||!e.verifiable) return 8; const s=(e.score==null?60:e.score); return Math.max(12,Math.min(100,s)); },
@@ -556,7 +580,7 @@ function chat(){
       this.input=""; this.busy=true;
       if(!this.currentId){ this.currentId='s'+Math.abs(Date.now()|0)+Math.floor(performance.now()); this.sessions.unshift({id:this.currentId,title:q.slice(0,40),messages:[]}); }
       this.messages.push({role:'user',text:q});
-      this.messages.push({role:'assistant',running:true,phaseMsg:'Starting…',frame:null,currentUrl:'',steps:[],report:null,error:null,meta:'',runId:null,qa:[],ask:'',asking:false,action:null,compare:[],detail:null,sort:'rank',filter:'all',copied:false});
+      this.messages.push({role:'assistant',running:true,phaseMsg:'Starting…',frame:null,currentUrl:'',steps:[],report:null,error:null,meta:'',runId:null,qa:[],ask:'',asking:false,action:null,compare:[],detail:null,sort:'rank',filter:'all',copied:false,phase:''});
       // IMPORTANT: mutate the reactive proxy element (not the raw object) so Alpine re-renders.
       const m=this.messages[this.messages.length-1];
       this.persist(); this.scrollDown();
@@ -568,7 +592,7 @@ function chat(){
       es.onmessage=(msg)=>{
         let ev; try{ ev=JSON.parse(msg.data); }catch{ return; }
         const t=ev.type;
-        if(t==='PHASE'){ m.phaseMsg=ev.message; }
+        if(t==='PHASE'){ m.phaseMsg=ev.message; if(ev.phase) m.phase=ev.phase; }
         else if(t==='STEP'){ if(ev.screenshot) m.frame='data:image/jpeg;base64,'+ev.screenshot; if(ev.url) m.currentUrl=ev.url; if(ev.thought) m.steps.push({kind:'step',text:ev.thought}); this.scrollDown(); }
         else if(t==='RECOVER'){ m.steps.push({kind:'recover',text:ev.message||'re-planning'}); }
         else if(t==='SCOUTED'){ m.phaseMsg='Found '+ev.count+' suppliers · scoring…'; }

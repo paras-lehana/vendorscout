@@ -131,6 +131,9 @@
                 class="px-3 py-1.5 rounded-lg border border-emerald-400/40 bg-emerald-500/10 text-emerald-200 font-medium hover:bg-emerald-500/20 disabled:opacity-40 press" title="Combine all your searches into one report">📋 Combined report</button>
         <a href="/learn" class="text-slate-400 hover:text-cyan-300 hidden sm:block">Learn</a>
         <a href="/theater" class="text-slate-400 hover:text-cyan-300 hidden sm:block">Theater</a>
+        <button @click="toggleDensity()" title="Toggle layout density" aria-label="Density"
+                class="px-2.5 py-1.5 rounded-md glass text-slate-300 hover:border-cyan-400 text-xs hidden md:block press"
+                x-text="density==='compact'?'⊞ Comfortable':'⊟ Compact'"></button>
         <select x-model="theme" @change="setTheme(theme)" title="Theme" aria-label="Theme"
                 class="bg-slate-900/60 border border-white/10 rounded-md text-xs px-2 py-1.5 text-slate-200 outline-none cursor-pointer">
           <option value="aurora">🌌 Aurora</option>
@@ -385,10 +388,10 @@
                           </template>
                           <span class="ml-auto text-[12px] text-slate-500 num" x-text="viewVendors(m).length+' shown'"></span>
                         </div>
-                        <div class="grid sm:grid-cols-2 gap-2">
+                        <div :class="density==='compact' ? 'grid sm:grid-cols-2 lg:grid-cols-3 gap-2' : 'grid sm:grid-cols-2 gap-2'">
                           <template x-for="o in viewVendors(m)" :key="o.i">
-                            <div class="fcard p-5 fade-up" :style="'animation-delay:'+(o.i*45)+'ms'"
-                                 :class="(m.compare||[]).includes(o.i)?'sel':((m.compare||[]).length===1?'dim':'')">
+                            <div class="fcard fade-up" :style="'animation-delay:'+(o.i*45)+'ms'"
+                                 :class="(density==='compact'?'p-3':'p-5')+' '+((m.compare||[]).includes(o.i)?'sel':((m.compare||[]).length===1?'dim':''))">
                               <div class="flex items-start justify-between gap-3">
                                 <div class="min-w-0">
                                   <div class="flex items-center gap-1.5 flex-wrap">
@@ -520,8 +523,9 @@
 <script>
 function chat(){
   return {
-    sidebarOpen:true, sessions:[], currentId:null, messages:[], input:"", busy:false, theme:'aurora',
+    sidebarOpen:true, sessions:[], currentId:null, messages:[], input:"", busy:false, theme:'aurora', density:'comfortable',
     setTheme(t){ this.theme=t||'aurora'; const el=document.documentElement; if(this.theme==='aurora') el.removeAttribute('data-theme'); else el.setAttribute('data-theme',this.theme); try{ localStorage.setItem('vs:theme',this.theme); }catch{} },
+    toggleDensity(){ this.density = this.density==='compact'?'comfortable':'compact'; try{ localStorage.setItem('vs:density',this.density); }catch{} },
     examples:[
       "Hitachi 1.5–2 ton ACs, bulk of 12, best price",
       "Industrial RO membrane suppliers in India",
@@ -580,6 +584,7 @@ function chat(){
     cmpWinner(m,k){ const a=this.cmpScore(this.cmpA(m),k), b=this.cmpScore(this.cmpB(m),k); if(a===0&&b===0) return '—'; if(a===b) return '='; return a>b?'◀':'▶'; },
     init(){
       try{ this.setTheme(localStorage.getItem('vs:theme')||'aurora'); }catch{}
+      try{ this.density=localStorage.getItem('vs:density')||'comfortable'; }catch{}
       try{ this.sessions = JSON.parse(localStorage.getItem('vs:sessions')||'[]'); }catch{ this.sessions=[]; }
       if(window.innerWidth < 768) this.sidebarOpen=false;
       const last = localStorage.getItem('vs:current');

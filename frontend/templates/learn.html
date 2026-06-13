@@ -16,6 +16,17 @@
     .node{position:relative}
     .node:not(:last-child)::after{content:"";position:absolute;top:50%;right:-1.6rem;width:1.6rem;height:2px;background:linear-gradient(90deg,#475569,#22d3ee)}
   </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:radial-gradient(1100px 500px at 75% -10%,#1e293b 0%,#0b1120 55%,#060912 100%);--g1:#818cf8;--g2:#22d3ee;--g3:#34d399}
+    [data-theme=sunset]{--bg:radial-gradient(1100px 500px at 75% -10%,#3b1e2e 0%,#180d12 55%,#0a0608 100%);--g1:#fb7185;--g2:#fbbf24;--g3:#f43f5e}
+    [data-theme=royal]{--bg:radial-gradient(1100px 500px at 75% -10%,#2a1e4d 0%,#130b28 55%,#080513 100%);--g1:#a78bfa;--g2:#818cf8;--g3:#e879f9}
+    [data-theme=mono]{--bg:radial-gradient(1100px 500px at 75% -10%,#222834 0%,#0e1117 55%,#070809 100%);--g1:#94a3b8;--g2:#cbd5e1;--g3:#64748b}
+    body{background:var(--bg)!important;font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:-.005em}
+    .grad{background:linear-gradient(90deg,var(--g1),var(--g2),var(--g3))!important;-webkit-background-clip:text;background-clip:text;color:transparent}
+  </style>
+  <script>(function(){try{var t=localStorage.getItem('vs:theme');if(t&&['sunset','royal','mono'].indexOf(t)>-1)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
 </head>
 <body class="text-slate-200 min-h-screen">
   <header class="flex items-center gap-3 px-5 py-4 border-b border-white/10">

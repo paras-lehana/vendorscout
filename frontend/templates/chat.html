@@ -375,6 +375,14 @@
                                     :class="(m.filter||'all')===f[0]?'bg-cyan-500/15 text-cyan-200 border-cyan-400/40':'border-white/10 text-slate-400 hover:bg-white/5'"
                                     x-text="f[1]"></button>
                           </template>
+                          <!-- filter by marketplace (only when >1 source) -->
+                          <template x-if="(m.report.sites||[]).length>1">
+                            <template x-for="s in m.report.sites" :key="'sf'+s">
+                              <button @click="m.filter=s" class="text-[12px] px-2.5 py-1 rounded-full border press"
+                                      :class="(m.filter||'all')===s?'bg-cyan-500/15 text-cyan-200 border-cyan-400/40':'border-white/10 text-slate-400 hover:bg-white/5'"
+                                      x-text="s"></button>
+                            </template>
+                          </template>
                           <span class="ml-auto text-[12px] text-slate-500 num" x-text="viewVendors(m).length+' shown'"></span>
                         </div>
                         <div class="grid sm:grid-cols-2 gap-2">
@@ -540,6 +548,7 @@ function chat(){
       const f=m.filter||'all';
       if(f==='priced') arr=arr.filter(o=>this._priceNum(o.v.price)!=null);
       else if(['Preferred','Consider','Caution'].includes(f)) arr=arr.filter(o=>o.v.recommendation===f);
+      else if(['IndiaMART','TradeIndia'].includes(f)) arr=arr.filter(o=>o.v.source_site===f);
       const s=m.sort||'rank';
       if(s==='score') arr.sort((a,b)=>(b.v.score||0)-(a.v.score||0));
       else if(s==='price-asc') arr.sort((a,b)=>((this._priceNum(a.v.price)??1e15)-(this._priceNum(b.v.price)??1e15)));

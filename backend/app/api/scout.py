@@ -233,6 +233,14 @@ async def _run_scout(run_id: str, req: ScoutRequest):
             return_exceptions=True)
         catalog, cat_url = im_res if isinstance(im_res, tuple) else ([], None)
         tradeindia = ti_res if isinstance(ti_res, list) else []
+        # TradeIndia search is keyword-sensitive — if the full query missed, retry with
+        # the concise product noun so more queries surface both marketplaces.
+        prod = (parsed.get("product") or "").strip()
+        if not tradeindia and prod and prod.lower() != search_query.lower():
+            try:
+                tradeindia = await fetch_tradeindia_suppliers(prod, req.max_vendors)
+            except Exception:  # noqa: BLE001
+                tradeindia = []
         for v in catalog:
             v.setdefault("source_site", "IndiaMART")
         await _emit(q, run_id, {"type": "STEP",

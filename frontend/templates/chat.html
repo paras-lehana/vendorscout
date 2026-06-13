@@ -241,7 +241,7 @@
                       <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-2 flex-wrap">
                           <span class="text-emerald-300 font-semibold text-base">✓ <span class="num" x-text="m.report.vendors.length"></span> suppliers</span>
-                          <span class="pill bg-white/5 text-slate-300" x-text="srcLabel(m.report.source)" :title="'Source: '+(m.report.source||'')"></span>
+                          <span class="pill bg-white/5 text-slate-300" x-text="sitesLabel(m)" :title="'Sources: '+(((m.report.sites||[]).join(', '))||m.report.source||'')"></span>
                           <span class="text-[12px] text-slate-500 num" x-text="m.meta"></span>
                         </div>
                         <p class="text-[13.5px] text-slate-300 mt-1 ln2 leading-snug" :title="m.report.executive_summary||m.report.summary" x-text="m.report.executive_summary||m.report.summary"></p>
@@ -385,6 +385,7 @@
                                 <div class="min-w-0">
                                   <div class="flex items-center gap-1.5 flex-wrap">
                                     <span class="text-[13px] text-slate-500 num" x-text="'#'+(o.i+1)"></span>
+                                    <span x-show="o.v.source_site" class="pill" :class="siteCls(o.v.source_site)" x-text="o.v.source_site"></span>
                                     <span x-show="o.i===0" class="pill bg-amber-400/15 text-amber-300 border border-amber-400/30">★ Top pick</span>
                                     <span x-show="isCheapest(m,o)" class="pill bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">💰 Cheapest</span>
                                     <span x-show="isBestValue(m,o) && !isCheapest(m,o)" class="pill bg-violet-500/15 text-violet-300 border border-violet-400/30">⚡ Best value</span>
@@ -558,6 +559,8 @@ function chat(){
       if((m.report && !m.running) || ki<cur) return 'border-emerald-400/40 text-emerald-300 bg-emerald-500/10';
       if(ki===cur) return 'border-cyan-400/50 text-cyan-200 bg-cyan-500/10'; return 'border-white/10 text-slate-500'; },
     srcLabel(s){ return s==='live'?'🟢 Live scrape':s==='catalog'?'📚 IndiaMART catalog':s==='sample'?'🗂 Real sample':'source'; },
+    sitesLabel(m){ const s=(m.report&&m.report.sites)||[]; return s.length?('📚 '+s.join(' + ')):this.srcLabel(m.report?m.report.source:''); },
+    siteCls(s){ return s==='TradeIndia'?'bg-teal-500/15 text-teal-300 border border-teal-400/30':'bg-indigo-500/15 text-indigo-300 border border-indigo-400/30'; },
     evTip(v,k){ const e=v.evidence&&v.evidence[k]; if(!e) return k; return (e.verifiable?'Seen in listing':'Not on listing — verify on supplier visit')+(e.note?': '+e.note:''); },
     dimPct(v,k){ const e=v.evidence&&v.evidence[k]; if(!e||!e.verifiable) return 8; const s=(e.score==null?60:e.score); return Math.max(12,Math.min(100,s)); },
     dimColor(v,k){ const e=v.evidence&&v.evidence[k]; if(!e||!e.verifiable) return 'bg-slate-600/40'; const s=(e.score==null?60:e.score); return s>=75?'bg-emerald-400':s>=50?'bg-cyan-400':'bg-amber-400'; },

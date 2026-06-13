@@ -25,6 +25,8 @@ from pydantic import BaseModel
 
 from app.tools.browser_agent import BrowserAgentClient
 from app.tools.indiamart_seo import fetch_seo_suppliers, load_seed_suppliers
+from app.tools.tradeindia import fetch_tradeindia_suppliers
+from urllib.parse import quote
 from app.tools.llm import LLMTool
 from app.config import settings
 
@@ -96,8 +98,8 @@ def _evidence_availability(v: dict) -> dict:
         "relevance": {"verifiable": True, "where": "Listing title"},
         "price": {"verifiable": _has_price(v), "where": "Listed price"},
         "specification": {"verifiable": has_specs, "where": "Listing spec sheet"},
-        "authenticity": {"verifiable": _is_indiamart_product_url(v.get("url")),
-                         "where": "IndiaMART product page"},
+        "authenticity": {"verifiable": _is_real_product_url(v.get("url")),
+                         "where": (v.get("source_site") or "Marketplace") + " product page"},
         "compliance": {"verifiable": False, "where": None},
         "financial": {"verifiable": False, "where": None},
         "risk": {"verifiable": False, "where": None},
@@ -112,8 +114,10 @@ def _enforce_honesty(report: dict, raw_vendors: list[dict]) -> dict:
     by_name = {str(x.get("name", "")).strip().lower(): x for x in raw_vendors}
     for v in report.get("vendors", []):
         src = by_name.get(str(v.get("name", "")).strip().lower(), {})
-        if src.get("url") and not v.get("url"):
-            v["url"] = src["url"]
+        # restore real fields from the scraped source (the LLM may drop/alter them)
+        for f in ("url", "source_site", "company", "product", "price", "location"):
+            if src.get(f) and not v.get(f):
+                v[f] = src[f]
         avail = _evidence_availability(src or v)
         ev = v.get("evidence") or {}
         fixed = {}
@@ -146,16 +150,36 @@ def _has_price(v: dict) -> bool:
 
 def _is_indiamart_product_url(url) -> bool:
     """A REAL, clickable IndiaMART listing URL (so a buyer can verify the product)
-    — not a planner-hallucinated slug. Catalog parses these from actual HTML."""
+    — not a planner-hallucinated slug. Catalog parses these from actual HTML.
+    Used to pick the auto-RFQ target (IndiaMART enquiry forms)."""
     u = str(url or "").lower()
     return "indiamart.com/proddetail" in u or "indiamart.com/impcat" in u
+
+
+def _is_real_product_url(url) -> bool:
+    """A real, clickable marketplace product URL (IndiaMART or TradeIndia) — used
+    for the authenticity dimension + trusting a live extraction."""
+    u = str(url or "").lower()
+    return _is_indiamart_product_url(u) or "tradeindia.com/products" in u
 
 
 def _real_urls(vendors) -> bool:
     if not isinstance(vendors, list) or not vendors:
         return False
     return sum(1 for v in vendors if isinstance(v, dict)
-               and _is_indiamart_product_url(v.get("url"))) >= max(2, len(vendors) // 2)
+               and _is_real_product_url(v.get("url"))) >= max(2, len(vendors) // 2)
+
+
+def _interleave(a: list, b: list) -> list:
+    """Alternate two source lists so both marketplaces appear in the top picks."""
+    out, i = [], 0
+    while i < len(a) or i < len(b):
+        if i < len(a):
+            out.append(a[i])
+        if i < len(b):
+            out.append(b[i])
+        i += 1
+    return out
 
 
 # Generic names the planner invents when it can't read real ones ("Supplier A",
@@ -197,20 +221,29 @@ async def _run_scout(run_id: str, req: ScoutRequest):
         async def on_update(ev: dict):
             await _emit(q, run_id, ev)  # forward live browser STEP/FRAME/RECOVER frames
 
-        # ---- 2a. Pull REAL, verifiable data from IndiaMART's live catalog FIRST ----
-        # (IndiaMART's JS search box is anti-bot protected — driving it headlessly is
-        # unreliable and the planner can hallucinate fake names/URLs. The catalog/SEO
-        # pages are server-rendered with real `proddetail` URLs a buyer can click.)
+        # ---- 2a. Pull REAL data from MULTIPLE marketplaces IN PARALLEL ----
+        # IndiaMART catalog (impcat SEO HTML) + TradeIndia (__NEXT_DATA__ JSON) — both
+        # server-rendered & reliable. The agent then MERGES + ranks across sites so the
+        # top picks are the best overall, not just from one marketplace.
         await _emit(q, run_id, {"type": "PHASE", "phase": "scout",
-                                "message": f"Scouting IndiaMART for “{search_query}”…"})
-        catalog, cat_url = await fetch_seo_suppliers(search_query, req.max_vendors)
-
-        # ---- 2b. THEATER: browse that REAL listings page live (no search box) ----
-        theater_url = cat_url or MARKETPLACE_URL
+                                "message": f"Scouting IndiaMART + TradeIndia for “{search_query}”…"})
+        im_res, ti_res = await asyncio.gather(
+            fetch_seo_suppliers(search_query, req.max_vendors),
+            fetch_tradeindia_suppliers(search_query, req.max_vendors),
+            return_exceptions=True)
+        catalog, cat_url = im_res if isinstance(im_res, tuple) else ([], None)
+        tradeindia = ti_res if isinstance(ti_res, list) else []
+        for v in catalog:
+            v.setdefault("source_site", "IndiaMART")
         await _emit(q, run_id, {"type": "STEP",
-                                "thought": f"Opening the live IndiaMART listings page for “{search_query}” and reading the suppliers shown…"})
+                                "thought": f"IndiaMART: {len(catalog)} · TradeIndia: {len(tradeindia)} suppliers — merging across marketplaces."})
+
+        # ---- 2b. THEATER: browse a REAL listings page live (visible agentic browsing) ----
+        theater_url = cat_url or ("https://www.tradeindia.com/search.html?keyword=" + quote(search_query))
+        await _emit(q, run_id, {"type": "STEP",
+                                "thought": f"Opening the live listings page for “{search_query}” and reading the suppliers shown…"})
         review_goal = (
-            f"You are viewing an IndiaMART listings page for '{search_query}'. Scroll and READ the "
+            f"You are viewing a B2B marketplace listings page for '{search_query}'. Scroll and READ the "
             f"supplier listings already shown on THIS page — note product names, prices and locations "
             f"into `extracted` as {{\"vendors\":[{{\"name\":..,\"product\":..,\"price\":..,\"location\":..,\"url\":..}}]}}. "
             f"Do NOT use the search box and do NOT navigate to other sites — just review what is on this page."
@@ -223,9 +256,11 @@ async def _run_scout(run_id: str, req: ScoutRequest):
         if not isinstance(browser_vendors, list):
             browser_vendors = []
 
-        # ---- 2c. Choose the most TRUSTWORTHY data source (catalog wins) ----
-        if catalog:
-            vendors, source = catalog, "catalog"
+        # ---- 2c. MERGE both marketplaces (interleaved) + choose source ----
+        merged = _interleave(catalog or [], tradeindia or [])
+        if merged:
+            vendors = merged[:8]                     # top picks across BOTH sites
+            source = "catalog"
         elif _usable(browser_vendors) and _real_urls(browser_vendors):
             vendors, source = browser_vendors, "live"
         else:
@@ -234,18 +269,22 @@ async def _run_scout(run_id: str, req: ScoutRequest):
                 vendors, source = seed, "sample"
             else:
                 vendors, source = (browser_vendors or []), "live"
+        for v in vendors:
+            v.setdefault("source_site", "IndiaMART")
+        sites = sorted({str(v.get("source_site", "IndiaMART")) for v in vendors})
         st["raw_vendors"] = vendors
         st["source"] = source
+        st["sites"] = sites
         if vendors:
             sample = ", ".join(str(v.get("name", "")) for v in vendors[:3] if v.get("name"))
             await _emit(q, run_id, {"type": "STEP",
-                                    "thought": f"Verified {len(vendors)} suppliers on IndiaMART (e.g. {sample}) — each with a clickable product link."})
-        await _emit(q, run_id, {"type": "SCOUTED", "count": len(vendors), "source": source})
+                                    "thought": f"Shortlisted {len(vendors)} suppliers across {', '.join(sites)} (e.g. {sample}) — each with a clickable product link."})
+        await _emit(q, run_id, {"type": "SCOUTED", "count": len(vendors), "source": source, "sites": sites})
 
         # ---- 3. SCORE (relative, evidence-based across the 9 dimensions) ----
         report = {"summary": "", "executive_summary": "", "vendors": [],
                   "query": req.query, "parsed": parsed, "source": source,
-                  "dimensions": DIMENSIONS}
+                  "sites": sites, "dimensions": DIMENSIONS}
         if vendors:
             await _emit(q, run_id, {"type": "PHASE", "phase": "score",
                                     "message": f"Comparing {len(vendors)} suppliers across 9 checks…"})

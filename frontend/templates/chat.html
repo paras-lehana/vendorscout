@@ -141,6 +141,9 @@
                             <span x-text="[v.product, v.location].filter(Boolean).join(' · ')"></span>
                             <a x-show="v.url" :href="v.url" target="_blank" rel="noopener"
                                class="text-cyan-400 hover:text-cyan-300 underline decoration-dotted">View on IndiaMART ↗</a>
+                            <a x-show="v.url && String(v.url).includes('indiamart.com/proddetail')"
+                               :href="'/theater?rfq=1&url='+encodeURIComponent(v.url)+'&name='+encodeURIComponent(v.name||'')" target="_blank"
+                               class="text-emerald-300 hover:text-emerald-200" title="Watch the agent fill a real IndiaMART enquiry and stop before sending">📨 Request quote ▸</a>
                           </div>
                           <!-- crisp measurable highlights -->
                           <div class="flex flex-wrap gap-1 mt-1.5">

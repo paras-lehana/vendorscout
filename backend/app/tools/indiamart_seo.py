@@ -45,16 +45,29 @@ _CATEGORY_HINTS: dict[str, str] = {
     "split air conditioner": "split-air-conditioners",
     "air conditioner": "air-conditioner",
     "ac": "air-conditioner",
-    "ro membrane": "ro-membrane",
-    "reverse osmosis membrane": "reverse-osmosis-membrane",
-    "submersible pump": "submersible-pump",
+    "ro membrane": "ro-membranes",
+    "reverse osmosis membrane": "ro-membranes",
+    "membrane": "ro-membranes",
+    "led driver": "led-drivers",
+    "submersible pump": "submersible-pumps",
     "led light": "led-lights",
-    "office chair": "office-chair",
-    "cctv camera": "cctv-camera",
+    "office chair": "office-chairs",
+    "cctv camera": "cctv-cameras",
     "industrial valve": "industrial-valves",
     "safety shoes": "safety-shoes",
-    "power transformer": "power-transformer",
+    "power transformer": "power-transformers",
 }
+
+
+def _variants(slug: str) -> list[str]:
+    """IndiaMART impcat slugs are inconsistent on plurality (ro-membrane vs
+    ro-membranes). Try the slug and its plural/singular sibling."""
+    out = [slug]
+    if slug.endswith("s"):
+        out.append(slug[:-1])
+    else:
+        out.append(slug + "s")
+    return out
 
 _STOP = {"best", "price", "bulk", "of", "for", "the", "a", "with", "ton", "buy",
          "near", "me", "top", "good", "quality", "in", "india", "online"}
@@ -79,9 +92,10 @@ def _candidate_urls(query: str) -> list[str]:
     seen: set[str] = set()
 
     def add(slug: str):
-        if slug and slug not in seen:
-            seen.add(slug)
-            urls.append(base.format(slug))
+        for s in _variants(slug):
+            if s and s not in seen:
+                seen.add(s)
+                urls.append(base.format(s))
 
     # 1) curated hints (substring match — longest key first for specificity)
     for key in sorted(_CATEGORY_HINTS, key=len, reverse=True):
@@ -97,7 +111,7 @@ def _candidate_urls(query: str) -> list[str]:
             add(_slug(" ".join(words[:2])))    # first two
             add(_slug(" ".join(words[-2:])))   # last two
         add(_slug(words[-1]))                  # head noun
-    return urls[:5]
+    return urls[:10]
 
 
 # One product card on an impcat page is a `template7-product-card` block.
@@ -147,10 +161,12 @@ def _m(rx: re.Pattern, s: str) -> Optional[str]:
     return mm.group(1) if mm else None
 
 
-async def fetch_seo_suppliers(query: str, max_n: int = 6, timeout: int = 20) -> list[dict]:
+async def fetch_seo_suppliers(query: str, max_n: int = 6, timeout: int = 20):
     """Fetch REAL suppliers for `query` from IndiaMART's catalog SEO pages.
 
-    Returns [] if no candidate category page yields real product cards.
+    Returns (vendors, source_url). The source_url is the live catalog page the
+    data came from — the theater browser then *browses that real page* instead of
+    fighting IndiaMART's anti-bot search box. Returns ([], None) on no match.
     """
     headers = {"User-Agent": _UA, "Accept-Language": "en-US,en;q=0.9",
                "Accept": "text/html,application/xhtml+xml"}
@@ -167,9 +183,9 @@ async def fetch_seo_suppliers(query: str, max_n: int = 6, timeout: int = 20) -> 
             recs = parse_impcat_html(r.text, max_n)
             if recs:
                 logger.info("indiamart SEO: %d real suppliers from %s", len(recs), url)
-                return recs
+                return recs, str(r.url)
     logger.info("indiamart SEO: no catalog match for %r", query)
-    return []
+    return [], None
 
 
 _SEED_CACHE: Optional[dict] = None

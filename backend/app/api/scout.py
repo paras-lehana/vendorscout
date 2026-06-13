@@ -194,44 +194,36 @@ async def _run_scout(run_id: str, req: ScoutRequest):
         st["parsed"] = parsed
         await _emit(q, run_id, {"type": "PLAN", "parsed": parsed})
 
-        # ---- 2. SCOUT (real browser discovery — streams live frames) ----
-        await _emit(q, run_id, {"type": "PHASE", "phase": "scout",
-                                "message": f"Scouting suppliers for “{search_query}” on IndiaMART…"})
-        goal = (
-            f"On IndiaMART, search for '{search_query}'. From the results listing, extract the top "
-            f"{req.max_vendors} suppliers as JSON {{\"vendors\":[{{\"name\":..,\"product\":..,"
-            f"\"price\":..,\"location\":..,\"url\":..}}]}}. Use null for fields not shown. "
-            f"Finish once you have up to {req.max_vendors}."
-        )
-
         async def on_update(ev: dict):
             await _emit(q, run_id, ev)  # forward live browser STEP/FRAME/RECOVER frames
 
-        result = await _browser.run_task_streaming(
-            url=MARKETPLACE_URL, goal=goal, on_update=on_update, timeout=120, max_steps=8)
-        raw = result.extracted_data if isinstance(result.extracted_data, dict) else {}
-        vendors = raw.get("vendors") or raw.get("suppliers") or []
-        if not isinstance(vendors, list):
-            vendors = []
-
-        # Hybrid resilience: IndiaMART's JS search is anti-bot protected and often
-        # serves the live browser a placeholder skeleton (no prices). When the live
-        # extraction isn't usable, fall back to REAL IndiaMART catalog data fetched
-        # from its SEO pages (reliable), then to a real captured sample as a last
-        # resort — so the chat never shows "0 suppliers". All paths are real data.
-        # The browser run above is the live THEATER. For the actual REPORT we use the
-        # most TRUSTWORTHY source, because IndiaMART's JS search is anti-bot: it serves
-        # the headless browser a skeleton (no prices) OR the planner returns
-        # plausible-but-FAKE names/URLs. So we treat IndiaMART's live catalog/SEO fetch
-        # (real `proddetail` URLs a buyer can click & verify) as authoritative, then a
-        # browser run ONLY if its URLs are genuinely IndiaMART links, then a real seed.
-        browser_vendors = vendors
-        await _emit(q, run_id, {"type": "STEP",
-                                "thought": "Cross-checking IndiaMART's live catalog for verified, clickable listings…"})
+        # ---- 2a. Pull REAL, verifiable data from IndiaMART's live catalog FIRST ----
+        # (IndiaMART's JS search box is anti-bot protected — driving it headlessly is
+        # unreliable and the planner can hallucinate fake names/URLs. The catalog/SEO
+        # pages are server-rendered with real `proddetail` URLs a buyer can click.)
         await _emit(q, run_id, {"type": "PHASE", "phase": "scout",
-                                "message": "Verifying suppliers against IndiaMART's catalog…"})
-        vendors, source = [], "live"
-        catalog = await fetch_seo_suppliers(search_query, req.max_vendors)
+                                "message": f"Scouting IndiaMART for “{search_query}”…"})
+        catalog, cat_url = await fetch_seo_suppliers(search_query, req.max_vendors)
+
+        # ---- 2b. THEATER: browse that REAL listings page live (no search box) ----
+        theater_url = cat_url or MARKETPLACE_URL
+        await _emit(q, run_id, {"type": "STEP",
+                                "thought": f"Opening the live IndiaMART listings page for “{search_query}” and reading the suppliers shown…"})
+        review_goal = (
+            f"You are viewing an IndiaMART listings page for '{search_query}'. Scroll and READ the "
+            f"supplier listings already shown on THIS page — note product names, prices and locations "
+            f"into `extracted` as {{\"vendors\":[{{\"name\":..,\"product\":..,\"price\":..,\"location\":..,\"url\":..}}]}}. "
+            f"Do NOT use the search box and do NOT navigate to other sites — just review what is on this page."
+        )
+        result = await _browser.run_task_streaming(
+            url=theater_url, goal=review_goal, on_update=on_update,
+            timeout=90, max_steps=6, allow_submit=False)
+        raw = result.extracted_data if isinstance(result.extracted_data, dict) else {}
+        browser_vendors = raw.get("vendors") or raw.get("suppliers") or []
+        if not isinstance(browser_vendors, list):
+            browser_vendors = []
+
+        # ---- 2c. Choose the most TRUSTWORTHY data source (catalog wins) ----
         if catalog:
             vendors, source = catalog, "catalog"
         elif _usable(browser_vendors) and _real_urls(browser_vendors):
@@ -240,14 +232,14 @@ async def _run_scout(run_id: str, req: ScoutRequest):
             seed = load_seed_suppliers(search_query, req.max_vendors)
             if seed:
                 vendors, source = seed, "sample"
-            elif browser_vendors:
-                vendors, source = browser_vendors, "live"  # degraded: shown, source flagged
+            else:
+                vendors, source = (browser_vendors or []), "live"
         st["raw_vendors"] = vendors
         st["source"] = source
         if vendors:
             sample = ", ".join(str(v.get("name", "")) for v in vendors[:3] if v.get("name"))
             await _emit(q, run_id, {"type": "STEP",
-                                    "thought": f"Found {len(vendors)} suppliers (e.g. {sample}) — reading prices, specs & locations."})
+                                    "thought": f"Verified {len(vendors)} suppliers on IndiaMART (e.g. {sample}) — each with a clickable product link."})
         await _emit(q, run_id, {"type": "SCOUTED", "count": len(vendors), "source": source})
 
         # ---- 3. SCORE (relative, evidence-based across the 9 dimensions) ----

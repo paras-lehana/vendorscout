@@ -16,7 +16,7 @@
     .pulse-dot{animation:pulse 1.4s infinite}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
   </style>
 </head>
-<body class="text-slate-200 min-h-screen" x-data="theater()">
+<body class="text-slate-200 min-h-screen" x-data="theater()" x-init="init()">
   <div class="max-w-7xl mx-auto px-4 py-6">
     <!-- Header -->
     <header class="flex items-center justify-between mb-6 gap-3 flex-wrap">
@@ -133,10 +133,25 @@
         examples:[
           {label:"⚡ Instant demo (example.com · ~4s)", url:"https://example.com", goal:"Read the page heading and return it as JSON {heading} then finish."},
           {label:"🏭 IndiaMART · RO membranes (~30s)", url:"https://www.indiamart.com", goal:"Search IndiaMART for industrial RO membrane suppliers and extract the top 5 company names, products and prices as JSON {suppliers:[{name,product,price,location}]}."},
-          {label:"🤝 Send an RFQ — live transaction (~25s)", url:"/mock/supplier", submit:true, goal:"On this supplier page, complete a Request-for-Quote: open/scroll to the 'Send Enquiry' form, fill product='8040 RO membrane, 5000 GPD', quantity='500 pieces', name='VendorScout Buyer', email='sourcing@vendorscout.demo', phone='9999999999', message='Please share best quote, MOQ, lead time and certifications.', then SUBMIT the form. Verify the success acknowledgement and return JSON {submitted:true, reference:<the acknowledgement reference shown>}."},
-          {label:"🔌 IndiaMART · LED drivers (~30s)", url:"https://www.indiamart.com", goal:"Search IndiaMART for 'LED driver 36W' suppliers and extract company names, locations and prices for the first 5 results as JSON {suppliers:[...]}."},
+          {label:"🤝 Send an RFQ — live transaction demo (~25s)", url:"/mock/supplier", submit:true, goal:"On this supplier page, complete a Request-for-Quote: open/scroll to the 'Send Enquiry' form, fill product='8040 RO membrane, 5000 GPD', quantity='500 pieces', name='VendorScout Buyer', email='sourcing@vendorscout.demo', phone='9999999999', message='Please share best quote, MOQ, lead time and certifications.', then SUBMIT the form. Verify the success acknowledgement and return JSON {submitted:true, reference:<the acknowledgement reference shown>}."},
+          {label:"📨 Real RFQ on IndiaMART (fill & stop at OTP)", url:"https://dir.indiamart.com/impcat/hitachi-air-conditioner.html", submit:false, goal:"You are on a REAL IndiaMART listings page. Open the first product's page, then start a Request-for-Quote: click 'Get Best Price' / 'Send Enquiry' and FILL the enquiry form with DUMMY buyer details — Quantity:'12', Requirement/Message:'Need 12 units in bulk; please share best price, MOQ, lead time and certifications.', Mobile:'9000000000', Name:'Demo Buyer', Email:'buyer@example.com'. Then STOP — do NOT click Sign In and do NOT submit/send (we confirm before sending). Return JSON {filled:true, fields_filled:[...], stopped_at:'<the Sign-In/OTP/submit gate you reached>'}."},
+          {label:"🔌 IndiaMART · LED drivers (~30s)", url:"https://dir.indiamart.com/impcat/led-driver.html", goal:"You are on a real IndiaMART listings page for LED drivers. Read the supplier listings shown — company names, locations and prices — and return JSON {suppliers:[{name,product,price,location}]}. Do not use the search box."},
         ],
         statusColor(){ return this.status==='running'?'text-emerald-300':(this.status==='completed'?'text-emerald-300':(this.status==='failed'?'text-amber-300':'text-slate-400')); },
+        rfqGoal(name){
+          return "On this IndiaMART product page"+(name?(" for '"+name+"'"):"")+", start a Request-for-Quote: click 'Get Best Price' or 'Send Enquiry', then FILL the enquiry form with DUMMY buyer details — Quantity:'12', Requirement/Message:'Need 12 units in bulk; please share best price, MOQ, lead time and certifications.', Mobile:'9000000000', Name:'Demo Buyer', Email:'buyer@example.com'. Then STOP — do NOT click Sign In and do NOT submit/send (we confirm before sending). Return JSON {filled:true, fields_filled:[...], stopped_at:'<the Sign-In/OTP/submit gate you reached>'}.";
+        },
+        init(){
+          // Deep-link from the chat report: /theater?url=<product>&rfq=1&name=<supplier>
+          try{
+            const p = new URLSearchParams(location.search);
+            const u = p.get('url');
+            if(u) this.url = u;
+            if(p.get('rfq')){ this.goal = this.rfqGoal(p.get('name')||''); this.allowSubmit = false; }
+            else if(p.get('goal')){ this.goal = p.get('goal'); }
+            if(u && (p.get('rfq')||p.get('autostart'))){ this.$nextTick(()=> this.launch()); }
+          }catch(e){ /* no-op */ }
+        },
         async launch(){
           // Resolve a relative URL (e.g. the mock supplier) against this origin.
           const targetUrl = this.url.startsWith("/") ? (location.origin + this.url) : this.url;

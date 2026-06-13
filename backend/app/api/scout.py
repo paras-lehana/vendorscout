@@ -271,6 +271,44 @@ async def _run_scout(run_id: str, req: ScoutRequest):
         await _emit(q, run_id, {"type": "REPORT", "report": report,
                                 "num_steps": result.num_steps,
                                 "duration_ms": result.duration_ms})
+
+        # ---- 4. ACT — autonomously draft an enquiry to the TOP match ----
+        # The agent doesn't wait to be asked: it opens the #1 supplier's real
+        # IndiaMART page, fills the enquiry with dummy buyer details, and STOPS at
+        # the Sign-In / Send-OTP gate (confirm-before-send). Best-effort: it never
+        # breaks the report. Users can re-run it on any product from the report.
+        top = next((v for v in report["vendors"]
+                    if _is_indiamart_product_url(v.get("url"))), None)
+        if top:
+            await _emit(q, run_id, {"type": "PHASE", "phase": "act",
+                                    "message": f"Drafting an enquiry to the top match — {top.get('name')}…"})
+            try:
+                rfq_goal = (
+                    f"You are on the IndiaMART product page for '{top.get('product') or top.get('name')}'. "
+                    "Start a Request-for-Quote: open 'Get Best Price' / 'Send Enquiry' (if a login or "
+                    "enquiry popup is already open, work WITH it — do not click behind a backdrop). FILL "
+                    "the enquiry form with DUMMY buyer details — Quantity:'12', Requirement:'Need 12 units "
+                    "in bulk; share best price, MOQ, lead time, certifications.', Mobile:'9000000000', "
+                    "Name:'Demo Buyer', Email:'buyer@example.com'. Then STOP — do NOT sign in / send OTP / "
+                    "submit (we confirm before sending). Return JSON {filled:true, fields_filled:[...], "
+                    "stopped_at:'<the Sign-In/OTP/submit gate you reached>'}."
+                )
+                act = await _browser.run_task_streaming(
+                    url=top["url"], goal=rfq_goal, on_update=on_update,
+                    timeout=80, max_steps=7, allow_submit=False)
+                ext = act.extracted_data if isinstance(act.extracted_data, dict) else {}
+                await _emit(q, run_id, {"type": "ACTION", "result": {
+                    "vendor": top.get("name"), "url": top.get("url"),
+                    "filled": bool(ext.get("filled") or ext.get("fields_filled")),
+                    "fields_filled": ext.get("fields_filled") or [],
+                    "stopped_at": ext.get("stopped_at") or "supplier's Sign-In / OTP gate",
+                    "status": "drafted_stopped_before_send"}})
+            except Exception as e:  # noqa: BLE001 — ACT is best-effort
+                logger.warning("auto-RFQ failed for %s: %s", run_id, e)
+                await _emit(q, run_id, {"type": "ACTION", "result": {
+                    "vendor": top.get("name"), "url": top.get("url"),
+                    "status": "incomplete",
+                    "stopped_at": "could not reach the enquiry form (site popup/anti-bot)"}})
     except Exception as e:  # noqa: BLE001
         logger.error("scout %s failed: %s", run_id, e)
         st["status"] = "failed"
@@ -352,3 +390,33 @@ async def ask_scout(run_id: str, body: AskRequest):
                 f"Buyer question: {body.question.strip()}\n\nAnswer:"),
         system_prompt=ASK_SYS) or "Sorry — I couldn't answer that from this report."
     return {"answer": answer}
+
+
+SESSION_SYS = (
+    "You are VendorScout. The buyer ran several sourcing searches this session; each has its ranked "
+    "suppliers (real IndiaMART listings). Produce ONE consolidated, decision-ready report across ALL of "
+    "them. Return ONLY JSON: {\"executive_summary\":\"3-4 plain lines spanning all searches\","
+    "\"pointers\":[\"10-15 crisp takeaways, <=15 words each — best pick per search, price ranges, what is "
+    "verified vs needs a supplier visit, and cross-search insights\"],"
+    "\"best_overall\":{\"query\":..,\"name\":..,\"price\":..,\"why\":\"<=15 words\"}}. "
+    "Use the REAL names/prices provided. Do NOT invent suppliers, certifications or numbers."
+)
+
+
+class SessionReportRequest(BaseModel):
+    searches: list[dict] = []   # [{query, vendors:[{name,price,location,score,recommendation,url}]}]
+
+
+@router.post("/session-report")
+async def session_report(body: SessionReportRequest):
+    """Consolidated 10-15 pointer report across every search in the session."""
+    searches = [s for s in (body.searches or []) if s.get("vendors")]
+    if not searches:
+        return JSONResponse({"error": "no searches with results in this session yet"}, status_code=400)
+    out = await _llm.generate_structured(
+        prompt=f"Sourcing searches this session (JSON):\n{json.dumps(searches)[:11000]}",
+        system_prompt=SESSION_SYS) or {}
+    out.setdefault("executive_summary", "")
+    out.setdefault("pointers", [])
+    out["search_count"] = len(searches)
+    return out

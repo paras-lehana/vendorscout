@@ -198,6 +198,8 @@ class BrowserAgentClient:
                                                        timeout=30000,
                                                        continue_on_error=True))
 
+                    repeat_sig = None
+                    repeat_n = 0
                     for step in range(steps_budget):
                         if time.monotonic() - started > timeout:
                             return self._finish(False, url, run_id, extracted, history,
@@ -220,6 +222,23 @@ class BrowserAgentClient:
                                  "url": obs["url"], "screenshot": obs["screenshot_b64"]}
                         await _emit(on_update, frame)
                         transcript.append({k: frame[k] for k in ("step", "thought", "url")})
+
+                        # Repeated-action breaker: if the planner keeps choosing the
+                        # SAME action on the SAME element (e.g. clicking a covered
+                        # "Get Best Price" behind a login popup), stop gracefully
+                        # instead of burning the whole budget on a wall.
+                        sig = ((plan.actions[0].action, (plan.actions[0].selector or "")[:60])
+                               if plan.actions else None)
+                        if sig and sig == repeat_sig:
+                            repeat_n += 1
+                        else:
+                            repeat_sig, repeat_n = sig, 0
+                        if repeat_n >= 2:
+                            extracted.setdefault(
+                                "stopped_at",
+                                "a login / OTP / pop-up gate the agent could not pass without signing in")
+                            return self._finish(bool(extracted), page.url, run_id, extracted,
+                                                history, transcript, started)
 
                         if plan.done or not plan.actions:
                             if plan.done:

@@ -77,9 +77,19 @@ Set "done": true (and "actions": []) ONLY when the goal is fully achieved; put t
   (e.g. an acknowledgement number after submitting a form).
 
 ## RECOVERY (critical — this is what makes the agent resilient)
-If the last action FAILED (see history), DO NOT repeat it blindly. Re-read the current page snapshot,
-pick a different selector or a different approach (scroll to reveal, dismiss a popup, try the search box,
-go back). Degrade gracefully: if a sub-goal is impossible, extract what you can and continue.
+If the last action FAILED (see history), DO NOT repeat the SAME action with the SAME selector — that is
+the #1 way to get stuck. Re-read the snapshot and change approach: a different selector, scroll to reveal,
+dismiss the popup, or work WITH whatever is now on screen. Degrade gracefully: if a sub-goal is impossible,
+record what you have in `extracted` and finish (done=true).
+
+## POPUPS / MODALS / OVERLAYS (common on real sites)
+Real marketplaces auto-open login/enquiry popups and dark backdrops that COVER the page (so clicks on
+elements behind them fail with "intercepts pointer events"). When that happens:
+- If the popup IS the form you need (it has phone / quantity / requirement fields), FILL IT directly —
+  do not try to click the button behind the backdrop.
+- If it is a login / "Sign In" / "Send OTP" wall, that is the stop point — record stopped_at and finish.
+- Otherwise dismiss it: a press of "Escape", or click its ✕ / "close" / "Skip" control, THEN continue.
+- Never click the same covered element repeatedly.
 
 ## CONFIRMING OUTCOMES (read this — it prevents getting stuck)
 - After you click/submit, you AUTOMATICALLY get a fresh view of the page on the next step. Do NOT add a `wait` for a success selector you are guessing (e.g. ".green-box", ".success") — guessed-selector waits just time out and waste steps.

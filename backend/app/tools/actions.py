@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import re
 from typing import Any, Literal, Optional
@@ -127,9 +128,24 @@ async def _click(page, a: Action) -> ActionResult:
     if not a.selector:
         raise ValueError("click requires 'selector'")
     loc = page.locator(a.selector).first
-    await loc.wait_for(state="visible", timeout=a.timeout)
-    await loc.scroll_into_view_if_needed(timeout=a.timeout)
-    await loc.click(timeout=a.timeout)
+    # Fail fast (real sites throw auto-popups): a stuck click must not burn the
+    # whole step budget on Playwright's internal 15s retry loop.
+    t = min(a.timeout or 8000, 8000)
+    await loc.wait_for(state="visible", timeout=t)
+    await loc.scroll_into_view_if_needed(timeout=t)
+    try:
+        await loc.click(timeout=t)
+    except Exception:
+        # A modal/backdrop (e.g. IndiaMART's `blckbg`) is intercepting pointer
+        # events. Dismiss the popup and retry; then force the click through.
+        with contextlib.suppress(Exception):
+            await page.keyboard.press("Escape")
+        with contextlib.suppress(Exception):
+            await page.mouse.click(8, 8)  # click a neutral corner to close overlays
+        try:
+            await loc.click(timeout=4000)
+        except Exception:
+            await loc.click(timeout=4000, force=True)  # bypass the interception
     return ActionResult(action="click", status="success", detail={"selector": a.selector})
 
 

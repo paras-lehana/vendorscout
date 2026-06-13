@@ -36,7 +36,9 @@
         </template>
         <div x-show="sessions.length===0" class="text-xs text-slate-500 px-1 mt-2">No past chats yet.</div>
       </div>
-      <a href="/learn" class="mt-3 text-xs text-slate-400 hover:text-cyan-300 px-1">📚 How vendor evaluation works →</a>
+      <button @click="sessionReport()" :disabled="busy"
+              class="mt-3 w-full text-left text-xs px-3 py-2 rounded-lg glass hover:border-emerald-400 text-emerald-200 disabled:opacity-40">📋 Combined session report</button>
+      <a href="/learn" class="mt-2 text-xs text-slate-400 hover:text-cyan-300 px-1">📚 How vendor evaluation works →</a>
     </div>
   </aside>
 
@@ -58,7 +60,7 @@
 
     <!-- transcript (THE ONLY THING THAT SCROLLS) -->
     <main class="flex-1 overflow-y-auto scroll" x-ref="scrollArea">
-      <div class="max-w-3xl mx-auto px-4 py-6 space-y-5">
+      <div class="max-w-5xl mx-auto px-4 py-6 space-y-5">
 
         <!-- empty / welcome state -->
         <div x-show="messages.length===0" x-cloak class="text-center pt-10">
@@ -125,10 +127,15 @@
                       </div>
                     </div>
 
-                    <!-- ranked suppliers -->
-                    <div class="space-y-2">
+                    <!-- ranked suppliers (2-up on wider screens to reduce centre clutter) -->
+                    <div class="grid sm:grid-cols-2 gap-2 items-start">
                       <template x-for="(v,i) in m.report.vendors" :key="i">
-                        <div class="rounded-xl border border-white/10 bg-slate-900/40 px-3 py-2" x-data="{open:false}">
+                        <div class="rounded-xl border border-white/10 bg-slate-900/40 px-3 py-2" x-data="{open:false}"
+                             :class="(m.compare||[]).includes(i) ? 'ring-1 ring-cyan-400/60' : ''">
+                          <label class="flex items-center gap-1 float-right text-[10px] text-slate-400 cursor-pointer select-none">
+                            <input type="checkbox" class="accent-cyan-400" :checked="(m.compare||[]).includes(i)" @change="toggleCompare(m,i)"/>
+                            <span>Compare</span>
+                          </label>
                           <div class="flex items-center gap-2 flex-wrap">
                             <span class="text-slate-500 text-xs" x-text="'#'+(i+1)"></span>
                             <span class="font-semibold text-slate-100" x-text="v.name"></span>
@@ -186,6 +193,56 @@
                       </template>
                     </div>
 
+                    <!-- compare two picks across the 9 factors -->
+                    <div x-show="(m.compare||[]).length===1" class="mt-2 text-[11px] text-cyan-300/80">Pick one more supplier to compare side-by-side.</div>
+                    <template x-if="(m.compare||[]).length===2">
+                      <div class="mt-3 rounded-xl border border-cyan-400/20 bg-slate-900/40 p-3">
+                        <div class="flex items-center justify-between mb-2">
+                          <div class="text-[10px] uppercase tracking-wide text-cyan-300">Compare · 9 factors</div>
+                          <button @click="m.compare=[]" class="text-[10px] text-slate-400 hover:text-slate-200">clear</button>
+                        </div>
+                        <div class="flex items-center gap-3 text-[11px] mb-2 flex-wrap">
+                          <span class="inline-flex items-center gap-1 text-indigo-300"><span class="inline-block w-2.5 h-2.5 rounded-sm bg-indigo-400"></span><span class="font-semibold" x-text="cmpA(m).name"></span><span class="text-slate-500" x-text="cmpA(m).price||''"></span></span>
+                          <span class="inline-flex items-center gap-1 text-cyan-300"><span class="inline-block w-2.5 h-2.5 rounded-sm bg-cyan-400"></span><span class="font-semibold" x-text="cmpB(m).name"></span><span class="text-slate-500" x-text="cmpB(m).price||''"></span></span>
+                        </div>
+                        <template x-for="d in dims" :key="'cmp'+d.k">
+                          <div class="flex items-center gap-2 mb-1.5 text-[11px]">
+                            <span class="w-20 shrink-0 text-slate-400" x-text="d.full"></span>
+                            <div class="flex-1 space-y-0.5">
+                              <div class="h-2 rounded-full bg-white/5 overflow-hidden"><div class="h-full bg-indigo-400 rounded-full" :style="'width:'+cmpScore(cmpA(m),d.k)+'%'"></div></div>
+                              <div class="h-2 rounded-full bg-white/5 overflow-hidden"><div class="h-full bg-cyan-400 rounded-full" :style="'width:'+cmpScore(cmpB(m),d.k)+'%'"></div></div>
+                            </div>
+                            <span class="w-6 shrink-0 text-center text-slate-300" x-text="cmpWinner(m,d.k)"></span>
+                          </div>
+                        </template>
+                        <p class="text-[10px] text-slate-500 mt-1">◀ left wins · ▶ right wins · bars = verified strength (blank = verify on visit).</p>
+                      </div>
+                    </template>
+
+                    <!-- autonomous enquiry (the agent acts on the top match by itself) -->
+                    <div x-show="m.running && !m.action" class="mt-3 rounded-xl border border-cyan-400/20 bg-cyan-500/5 px-3 py-2 text-xs text-cyan-200 flex items-center gap-2">
+                      <span class="chrome-dot bg-cyan-400 pulse"></span>
+                      <span>Now drafting an enquiry to the top match automatically… (watch above)</span>
+                    </div>
+                    <template x-if="m.action">
+                      <div class="mt-3 rounded-xl border border-emerald-400/20 bg-emerald-500/5 px-3 py-2">
+                        <div class="text-[10px] uppercase tracking-wide text-emerald-300 mb-0.5">🤝 Autonomous enquiry</div>
+                        <p class="text-sm text-slate-200" x-show="m.action.status!=='incomplete'">
+                          Enquiry drafted for <span class="font-semibold" x-text="m.action.vendor"></span>,
+                          paused at <span x-text="m.action.stopped_at"></span> — <span class="text-slate-400">we never send without your confirmation.</span>
+                        </p>
+                        <p class="text-sm text-amber-200" x-show="m.action.status==='incomplete'">
+                          Reached <span class="font-semibold" x-text="m.action.vendor"></span>'s page; <span x-text="m.action.stopped_at"></span>.
+                        </p>
+                        <div class="flex flex-wrap gap-1 mt-1" x-show="(m.action.fields_filled||[]).length">
+                          <span class="text-[10px] text-slate-500">filled:</span>
+                          <template x-for="(f,fi) in (m.action.fields_filled||[])" :key="fi">
+                            <span class="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-slate-300" x-text="f"></span>
+                          </template>
+                        </div>
+                      </div>
+                    </template>
+
                     <!-- ask-the-report (runtime Q&A grounded in stored reasoning) -->
                     <div class="mt-3 border-t border-white/10 pt-3">
                       <div class="text-[10px] uppercase tracking-wide text-slate-500 mb-1">Question this report</div>
@@ -203,6 +260,29 @@
                                 class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-900 bg-gradient-to-r from-indigo-400 to-cyan-400 disabled:opacity-40">Ask</button>
                       </form>
                     </div>
+                  </div>
+                </template>
+
+                <!-- combined session report (10-15 pointers across all searches) -->
+                <template x-if="m.sessionReport">
+                  <div class="glass rounded-2xl p-4">
+                    <div class="text-emerald-300 font-semibold mb-2">📋 Combined session report · <span x-text="m.sessionReport.search_count"></span> searches</div>
+                    <div class="rounded-xl bg-indigo-500/10 border border-indigo-400/20 px-3 py-2 mb-3">
+                      <div class="text-[10px] uppercase tracking-wide text-indigo-300 mb-0.5">Executive summary</div>
+                      <p class="text-sm text-slate-200 leading-snug" x-text="m.sessionReport.executive_summary"></p>
+                    </div>
+                    <div x-show="m.sessionReport.best_overall" class="text-sm mb-2">
+                      <span class="text-emerald-300 font-semibold">Best overall:</span>
+                      <span class="text-slate-100" x-text="m.sessionReport.best_overall && [m.sessionReport.best_overall.name, m.sessionReport.best_overall.price].filter(Boolean).join(' · ')"></span>
+                      <span class="text-slate-500" x-text="m.sessionReport.best_overall && m.sessionReport.best_overall.query ? '('+m.sessionReport.best_overall.query+')' : ''"></span>
+                      <span class="text-slate-400 block text-xs" x-text="m.sessionReport.best_overall && m.sessionReport.best_overall.why"></span>
+                    </div>
+                    <div class="text-[10px] uppercase tracking-wide text-slate-500 mb-1">Key pointers</div>
+                    <ol class="list-decimal ml-5 space-y-1">
+                      <template x-for="(p,pi) in (m.sessionReport.pointers||[])" :key="pi">
+                        <li class="text-sm text-slate-300 leading-snug" x-text="p"></li>
+                      </template>
+                    </ol>
                   </div>
                 </template>
 
@@ -252,6 +332,11 @@ function chat(){
     evTip(v,k){ const e=v.evidence&&v.evidence[k]; if(!e) return k; return (e.verifiable?'Seen in listing':'Not on listing — verify on supplier visit')+(e.note?': '+e.note:''); },
     dimPct(v,k){ const e=v.evidence&&v.evidence[k]; if(!e||!e.verifiable) return 8; const s=(e.score==null?60:e.score); return Math.max(12,Math.min(100,s)); },
     dimColor(v,k){ const e=v.evidence&&v.evidence[k]; if(!e||!e.verifiable) return 'bg-slate-600/40'; const s=(e.score==null?60:e.score); return s>=75?'bg-emerald-400':s>=50?'bg-cyan-400':'bg-amber-400'; },
+    toggleCompare(m,i){ if(!m.compare) m.compare=[]; const x=m.compare.indexOf(i); if(x>=0){ m.compare.splice(x,1); } else { if(m.compare.length>=2) m.compare.shift(); m.compare.push(i); } },
+    cmpA(m){ return (m.report.vendors||[])[(m.compare||[])[0]] || {}; },
+    cmpB(m){ return (m.report.vendors||[])[(m.compare||[])[1]] || {}; },
+    cmpScore(v,k){ const e=v&&v.evidence&&v.evidence[k]; return (e&&e.verifiable&&e.score!=null)?Math.max(0,Math.min(100,e.score)):0; },
+    cmpWinner(m,k){ const a=this.cmpScore(this.cmpA(m),k), b=this.cmpScore(this.cmpB(m),k); if(a===0&&b===0) return '—'; if(a===b) return '='; return a>b?'◀':'▶'; },
     init(){
       try{ this.sessions = JSON.parse(localStorage.getItem('vs:sessions')||'[]'); }catch{ this.sessions=[]; }
       if(window.innerWidth < 768) this.sidebarOpen=false;
@@ -277,7 +362,7 @@ function chat(){
       this.input=""; this.busy=true;
       if(!this.currentId){ this.currentId='s'+Math.abs(Date.now()|0)+Math.floor(performance.now()); this.sessions.unshift({id:this.currentId,title:q.slice(0,40),messages:[]}); }
       this.messages.push({role:'user',text:q});
-      this.messages.push({role:'assistant',running:true,phaseMsg:'Starting…',frame:null,currentUrl:'',steps:[],report:null,error:null,meta:'',runId:null,qa:[],ask:'',asking:false});
+      this.messages.push({role:'assistant',running:true,phaseMsg:'Starting…',frame:null,currentUrl:'',steps:[],report:null,error:null,meta:'',runId:null,qa:[],ask:'',asking:false,action:null,compare:[]});
       // IMPORTANT: mutate the reactive proxy element (not the raw object) so Alpine re-renders.
       const m=this.messages[this.messages.length-1];
       this.persist(); this.scrollDown();
@@ -293,7 +378,8 @@ function chat(){
         else if(t==='STEP'){ if(ev.screenshot) m.frame='data:image/jpeg;base64,'+ev.screenshot; if(ev.url) m.currentUrl=ev.url; if(ev.thought) m.steps.push({kind:'step',text:ev.thought}); this.scrollDown(); }
         else if(t==='RECOVER'){ m.steps.push({kind:'recover',text:ev.message||'re-planning'}); }
         else if(t==='SCOUTED'){ m.phaseMsg='Found '+ev.count+' suppliers · scoring…'; }
-        else if(t==='REPORT'){ m.report=ev.report; m.running=false; m.meta=(ev.num_steps?ev.num_steps+' steps · ':'')+(ev.duration_ms?Math.round(ev.duration_ms/1000)+'s':''); this.persist(); this.scrollDown(); }
+        else if(t==='REPORT'){ m.report=ev.report; m.meta=(ev.num_steps?ev.num_steps+' steps · ':'')+(ev.duration_ms?Math.round(ev.duration_ms/1000)+'s':''); this.persist(); this.scrollDown(); /* keep running: the agent now auto-drafts an enquiry */ }
+        else if(t==='ACTION'){ m.action=ev.result; this.persist(); this.scrollDown(); }
         else if(t==='ERROR'){ m.error=ev.message; m.running=false; }
         else if(t==='END'){ m.running=false; this.busy=false; es.close(); this.persist(); this.scrollDown(); }
       };
@@ -309,6 +395,27 @@ function chat(){
         m.qa[idx].a = res.answer || '(no answer)';
       }catch(e){ m.qa[idx].a='Could not answer: '+e; }
       m.qa[idx].loading=false; m.asking=false; this.persist(); this.scrollDown();
+    },
+    async sessionReport(){
+      if(this.busy) return;
+      // gather every completed search in this session
+      const searches=[];
+      for(let i=0;i<this.messages.length;i++){
+        const mm=this.messages[i];
+        if(mm.role==='assistant' && mm.report && (mm.report.vendors||[]).length){
+          let q=mm.report.query; if(!q){ const prev=this.messages[i-1]; q=prev&&prev.role==='user'?prev.text:''; }
+          searches.push({query:q, vendors:(mm.report.vendors||[]).slice(0,6).map(v=>({name:v.name,price:v.price,location:v.location,score:v.score,recommendation:v.recommendation,url:v.url}))});
+        }
+      }
+      if(!searches.length){ alert('Run at least one search first — then I can combine them.'); return; }
+      this.busy=true;
+      this.messages.push({role:'assistant',running:true,phaseMsg:'Combining all your searches into one report…',frame:null,currentUrl:'',steps:[],report:null,error:null,meta:'',runId:null,qa:[],ask:'',asking:false,action:null,sessionReport:null});
+      const m=this.messages[this.messages.length-1]; this.persist(); this.scrollDown();
+      try{
+        const res=await (await fetch('/api/scout/session-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({searches})})).json();
+        m.sessionReport=res; m.running=false;
+      }catch(e){ m.running=false; m.error='Could not build session report: '+e; }
+      this.busy=false; this.persist(); this.scrollDown();
     },
   }
 }

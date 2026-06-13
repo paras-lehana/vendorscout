@@ -25,8 +25,24 @@
     [data-theme=mono]{--bg:radial-gradient(1100px 500px at 75% -10%,#222834 0%,#0e1117 55%,#070809 100%);--g1:#94a3b8;--g2:#cbd5e1;--g3:#64748b}
     body{background:var(--bg)!important;font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:-.005em}
     .grad{background:linear-gradient(90deg,var(--g1),var(--g2),var(--g3))!important;-webkit-background-clip:text;background-clip:text;color:transparent}
+    html{scroll-behavior:smooth}
+    /* smooth "how it works" flow */
+    @keyframes luFade{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+    .node{animation:luFade .5s cubic-bezier(.2,.7,.3,1) both;transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease}
+    .node:nth-child(1){animation-delay:.05s}.node:nth-child(2){animation-delay:.14s}.node:nth-child(3){animation-delay:.23s}
+    .node:nth-child(4){animation-delay:.32s}.node:nth-child(5){animation-delay:.41s}.node:nth-child(6){animation-delay:.50s}.node:nth-child(7){animation-delay:.59s}
+    .node:hover{transform:translateY(-4px);border-color:var(--accent,#22d3ee);box-shadow:0 12px 28px -10px rgba(0,0,0,.5)}
+    @keyframes connPulse{0%,100%{opacity:.45}50%{opacity:1}}
+    .node:not(:last-child)::after{background:linear-gradient(90deg,#475569,var(--accent,#22d3ee))!important;animation:connPulse 2.2s ease-in-out infinite}
+    .glass{transition:transform .16s ease,border-color .16s ease}
+    section .grid > .glass:hover{transform:translateY(-3px);border-color:var(--accent,#22d3ee)}
+    [data-theme=light]{--bg:radial-gradient(1100px 600px at 78% -12%,#eef2ff 0%,#f5f7fb 45%,#eef1f6 100%);--g1:#6366f1;--g2:#0891b2;--g3:#059669;--accent:#0891b2}
+    [data-theme=light] body{color:#0f172a}
+    [data-theme=light] .glass{background:#fff!important;border-color:#e2e8f0!important}
+    [data-theme=light] .text-slate-100{color:#0f172a!important}[data-theme=light] .text-slate-400{color:#475569!important}[data-theme=light] .text-slate-500{color:#64748b!important}
+    [data-theme=light] .border-white\/10{border-color:#e2e8f0!important}
   </style>
-  <script>(function(){try{var t=localStorage.getItem('vs:theme');if(t&&['sunset','royal','mono'].indexOf(t)>-1)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+  <script>(function(){try{var t=localStorage.getItem('vs:theme');if(t&&['sunset','royal','mono','light'].indexOf(t)>-1)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
 </head>
 <body class="text-slate-200 min-h-screen">
   <header class="flex items-center gap-3 px-5 py-4 border-b border-white/10">

@@ -162,6 +162,10 @@
             <span class="flex items-center gap-1.5"><span class="text-cyan-300">②</span> Scores across 9 factors</span>
             <span class="flex items-center gap-1.5"><span class="text-emerald-300">③</span> Drafts the enquiry</span>
           </div>
+          <div class="flex items-center justify-center gap-3 mt-6">
+            <a href="/learn" class="chip-ex press inline-flex items-center gap-1.5 text-[13px] text-cyan-200 px-4 py-2 rounded-xl glass">⚙️ See how it works</a>
+            <a href="/theater" class="chip-ex press inline-flex items-center gap-1.5 text-[13px] text-slate-300 px-4 py-2 rounded-xl glass">🎬 Watch the agent live</a>
+          </div>
         </div>
 
         <!-- messages -->
@@ -377,9 +381,11 @@
                                  :class="(m.compare||[]).includes(o.i)?'sel':((m.compare||[]).length===1?'dim':'')">
                               <div class="flex items-start justify-between gap-3">
                                 <div class="min-w-0">
-                                  <div class="flex items-center gap-2">
+                                  <div class="flex items-center gap-1.5 flex-wrap">
                                     <span class="text-[13px] text-slate-500 num" x-text="'#'+(o.i+1)"></span>
                                     <span x-show="o.i===0" class="pill bg-amber-400/15 text-amber-300 border border-amber-400/30">★ Top pick</span>
+                                    <span x-show="isCheapest(m,o)" class="pill bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">💰 Cheapest</span>
+                                    <span x-show="isBestValue(m,o) && !isCheapest(m,o)" class="pill bg-violet-500/15 text-violet-300 border border-violet-400/30">⚡ Best value</span>
                                   </div>
                                   <button @click="openDetail(m,o.i)" class="text-[19px] font-semibold text-slate-100 hover:text-cyan-300 text-left ln2 leading-tight" x-text="o.v.name"></button>
                                 </div>
@@ -522,6 +528,10 @@ function chat(){
     others(m){ return (m.report.vendors||[]).map((v,i)=>({v,i})).filter(o=>!(m.compare||[]).includes(o.i)); },
     openDetail(m,i){ m.detail = (m.detail===i ? null : i); },
     _priceNum(p){ if(!p) return null; const n=String(p).replace(/[^0-9.]/g,''); return n?parseFloat(n):null; },
+    _minPrice(m){ let min=Infinity; (m.report.vendors||[]).forEach(v=>{const n=this._priceNum(v.price); if(n!=null&&n<min)min=n;}); return min; },
+    isCheapest(m,o){ const n=this._priceNum(o.v.price); const mn=this._minPrice(m); return n!=null && isFinite(mn) && n===mn; },
+    _value(v){ const n=this._priceNum(v.price); return (n&&n>0)?(v.score||0)/n:0; },
+    isBestValue(m,o){ const mx=Math.max(...(m.report.vendors||[]).map(x=>this._value(x))); return mx>0 && this._value(o.v)===mx; },
     viewVendors(m){
       let arr=(m.report.vendors||[]).map((v,i)=>({v,i}));
       const f=m.filter||'all';

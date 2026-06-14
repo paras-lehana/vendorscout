@@ -470,18 +470,6 @@
                       </div>
                     </template>
 
-                    <!-- autonomous enquiry strip -->
-                    <div x-show="m.running && !m.action" class="mt-3 rounded-lg border border-cyan-400/20 bg-cyan-500/5 px-3 py-2 text-[12.5px] text-cyan-200 flex items-center gap-2">
-                      <span class="chrome-dot bg-cyan-400 pulse"></span><span>Auto-drafting an enquiry to the top match… (watch above)</span>
-                    </div>
-                    <template x-if="m.action">
-                      <div class="mt-2 rounded-lg border border-emerald-400/20 bg-emerald-500/5 px-3 py-2 text-[12.5px]">
-                        <span class="text-emerald-300 font-medium">🤝 Autonomous enquiry:</span>
-                        <span class="text-slate-300" x-show="m.action.status!=='incomplete'">drafted for <span class="font-medium" x-text="m.action.vendor"></span>, paused at <span x-text="m.action.stopped_at"></span> — never sent without confirmation.</span>
-                        <span class="text-amber-200" x-show="m.action.status==='incomplete'">reached <span class="font-medium" x-text="m.action.vendor"></span>'s page; <span x-text="m.action.stopped_at"></span>.</span>
-                      </div>
-                    </template>
-
                     <!-- compact Q&A -->
                     <div class="mt-3 pt-3 border-t border-white/10">
                       <template x-for="(qa,qi) in (m.qa||[])" :key="qi">

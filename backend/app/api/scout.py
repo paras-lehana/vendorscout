@@ -246,13 +246,11 @@ async def _run_scout(run_id: str, req: ScoutRequest):
         await _emit(q, run_id, {"type": "STEP",
                                 "thought": f"IndiaMART: {len(catalog)} · TradeIndia: {len(tradeindia)} suppliers — merging across marketplaces."})
 
-        # ---- 2b. THEATER: live preview panes for BOTH marketplaces ----
-        # Both sources were already fetched in parallel above. We show each as a live
-        # pane: TradeIndia streams its found listings as rows; IndiaMART gets a REAL
-        # browser preview (single browser — reliable; two parallel browsers overloaded
-        # the shared Chromium and stalled the run). Data is unaffected either way.
-        im_url = cat_url
-
+        # ---- 2b. Stream each marketplace's findings into its pane (calm + symmetric) ----
+        # Both sources were fetched in parallel above; we stream their found suppliers into
+        # two consistent panes + the activity log. NO in-search browser here — it made the
+        # search slow/janky and asymmetric. The LIVE browser is the dedicated /theater page
+        # and the per-product "Request quote" action (intentional, not on every search).
         def _rows(vs):
             return [{"name": v.get("name"), "price": v.get("price"),
                      "location": v.get("location")} for v in (vs or [])[:6]]
@@ -260,27 +258,15 @@ async def _run_scout(run_id: str, req: ScoutRequest):
         await _emit(q, run_id, {"type": "PANES", "panes": [
             {"site": "IndiaMART", "found": len(catalog)},
             {"site": "TradeIndia", "found": len(tradeindia)}]})
-        await _emit(q, run_id, {"type": "PANE_DATA", "pane": "TradeIndia", "items": _rows(tradeindia),
-                                "status": (f"{len(tradeindia)} listings read" if tradeindia else "no listings")})
+        await _emit(q, run_id, {"type": "STEP", "pane": "IndiaMART",
+                                "thought": f"Read {len(catalog)} IndiaMART listings — names, prices, locations."})
         await _emit(q, run_id, {"type": "PANE_DATA", "pane": "IndiaMART", "items": _rows(catalog),
-                                "status": (f"{len(catalog)} listings" if catalog else "no listings")})
-
+                                "status": (f"{len(catalog)} found" if catalog else "no listings")})
+        await _emit(q, run_id, {"type": "STEP", "pane": "TradeIndia",
+                                "thought": f"Read {len(tradeindia)} TradeIndia listings — names, prices, locations."})
+        await _emit(q, run_id, {"type": "PANE_DATA", "pane": "TradeIndia", "items": _rows(tradeindia),
+                                "status": (f"{len(tradeindia)} found" if tradeindia else "no listings")})
         browser_vendors = []
-        if im_url:
-            async def im_cb(ev):
-                await _emit(q, run_id, {**ev, "pane": "IndiaMART"})
-            try:
-                result = await _browser.run_task_streaming(
-                    url=im_url, on_update=im_cb, timeout=75, max_steps=5, allow_submit=False,
-                    goal=(f"You are viewing the IndiaMART listings page for '{search_query}'. Scroll slowly "
-                          f"down and read the supplier listings shown — just review this page; do NOT use the "
-                          f"search box or navigate elsewhere."))
-                raw = result.extracted_data if isinstance(result.extracted_data, dict) else {}
-                browser_vendors = raw.get("vendors") or raw.get("suppliers") or []
-                if not isinstance(browser_vendors, list):
-                    browser_vendors = []
-            except Exception as e:  # noqa: BLE001
-                await _emit(q, run_id, {"type": "PANE_STATUS", "pane": "IndiaMART", "status": "preview ended"})
 
         # ---- 2c. MERGE both marketplaces (interleaved) + choose source ----
         merged = _interleave(catalog or [], tradeindia or [])
@@ -333,49 +319,9 @@ async def _run_scout(run_id: str, req: ScoutRequest):
 
         st["status"] = "completed"
         st["report"] = report
-        await _emit(q, run_id, {"type": "REPORT", "report": report,
-                                "num_steps": result.num_steps,
-                                "duration_ms": result.duration_ms})
-
-        # ---- 4. ACT — autonomously draft an enquiry to the TOP match ----
-        # The agent doesn't wait to be asked: it opens the #1 supplier's real
-        # IndiaMART page, fills the enquiry with dummy buyer details, and STOPS at
-        # the Sign-In / Send-OTP gate (confirm-before-send). Best-effort: it never
-        # breaks the report. Users can re-run it on any product from the report.
-        top = next((v for v in report["vendors"]
-                    if _is_real_product_url(v.get("url"))), None)
-        if top:
-            _site = top.get("source_site") or "the marketplace"
-            await _emit(q, run_id, {"type": "PHASE", "phase": "act",
-                                    "message": f"Drafting an enquiry to the top match — {top.get('name')} ({_site})…"})
-            try:
-                rfq_goal = (
-                    f"You are on the {_site} product page for '{top.get('product') or top.get('name')}'. "
-                    "Start a Request-for-Quote: open the enquiry button ('Get Best Price' / 'Send Enquiry' on "
-                    "IndiaMART, or 'Send Inquiry' / 'Contact Supplier' on TradeIndia; if a login or enquiry "
-                    "popup is already open, work WITH it — do not click behind a backdrop). FILL the enquiry "
-                    "form with DUMMY buyer details — Quantity:'12', Requirement:'Need 12 units in bulk; share "
-                    "best price, MOQ, lead time, certifications.', Mobile:'9000000000', Name:'Demo Buyer', "
-                    "Email:'buyer@example.com'. Then STOP — do NOT sign in / send OTP / submit (we confirm "
-                    "before sending). Return JSON {filled:true, fields_filled:[...], "
-                    "stopped_at:'<the Sign-In/OTP/submit gate you reached>'}."
-                )
-                act = await _browser.run_task_streaming(
-                    url=top["url"], goal=rfq_goal, on_update=on_update,
-                    timeout=80, max_steps=7, allow_submit=False)
-                ext = act.extracted_data if isinstance(act.extracted_data, dict) else {}
-                await _emit(q, run_id, {"type": "ACTION", "result": {
-                    "vendor": top.get("name"), "url": top.get("url"),
-                    "filled": bool(ext.get("filled") or ext.get("fields_filled")),
-                    "fields_filled": ext.get("fields_filled") or [],
-                    "stopped_at": ext.get("stopped_at") or "supplier's Sign-In / OTP gate",
-                    "status": "drafted_stopped_before_send"}})
-            except Exception as e:  # noqa: BLE001 — ACT is best-effort
-                logger.warning("auto-RFQ failed for %s: %s", run_id, e)
-                await _emit(q, run_id, {"type": "ACTION", "result": {
-                    "vendor": top.get("name"), "url": top.get("url"),
-                    "status": "incomplete",
-                    "stopped_at": "could not reach the enquiry form (site popup/anti-bot)"}})
+        # The report is the final, calm state — no background agent after results.
+        # RFQ is user-initiated via the "Request quote" button (opens the Theater).
+        await _emit(q, run_id, {"type": "REPORT", "report": report})
     except Exception as e:  # noqa: BLE001
         logger.error("scout %s failed: %s", run_id, e)
         st["status"] = "failed"

@@ -97,10 +97,16 @@ elements behind them fail with "intercepts pointer events"). When that happens:
 - Use `wait` ONLY as a short settle: {"action":"wait","until":"duration","duration":1500}. Never wait on a selector you haven't actually seen in the snapshot.
 - Don't re-fill or re-click a form you already submitted — check the visible text first.
 
-## TRANSACTIONS
-For RFQ/enquiry/contact forms: open the form, fill each field from the provided buyer/RFQ details,
-then submit, then VERIFY a success/acknowledgement state and extract any reference text. Use null for
-fields you cannot find — never invent data.
+## TRANSACTIONS / RFQ — two steps: OPEN the form, then FILL it (do not re-open)
+1. Click the enquiry button ONCE — "Get Best Price"/"Send Enquiry" (IndiaMART) or "Send Inquiry"/
+   "Contact Supplier" (TradeIndia). These buttons often appear MANY times on a page (one per card);
+   clicking any one opens an enquiry form (a panel/modal usually with Quantity / Requirement / Message /
+   Mobile fields).
+2. As soon as those form fields are visible in the snapshot, STOP clicking the enquiry button — instead
+   FILL the fields with the provided buyer/RFQ details (fill Quantity, then Requirement/Message, then
+   Mobile, then Name/Email if present). Re-clicking "Send Inquiry" again is WRONG once the form is open.
+3. STOP at the gate: if the only thing left is Sign In / Login / "Send OTP" / a phone-verify, do NOT
+   submit — record stopped_at and set done=true. Use null for fields you cannot find — never invent data.
 
 ## SELF-CHECK before responding
 - Pure JSON, no fences. Every action has an "action" key from the list above. Never use "type".

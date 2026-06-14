@@ -233,7 +233,7 @@ class BrowserAgentClient:
                             repeat_n += 1
                         else:
                             repeat_sig, repeat_n = sig, 0
-                        if repeat_n >= 2:
+                        if repeat_n >= 3:
                             extracted.setdefault(
                                 "stopped_at",
                                 "a login / OTP / pop-up gate the agent could not pass without signing in")
@@ -262,6 +262,16 @@ class BrowserAgentClient:
                                                 "error": res.error})
                                 if res.action == "extract" and res.value is not None:
                                     extracted[res.name or act.name or "extract"] = res.value
+                                # Smoother "live" view: push a fresh frame showing the
+                                # RESULT of this action (click/scroll/type), not just the
+                                # once-per-step observe frame — so it feels like a live
+                                # browser, not a slideshow.
+                                with contextlib.suppress(Exception):
+                                    await page.wait_for_timeout(250)
+                                    _png = await page.screenshot(type="jpeg", quality=55, full_page=False)
+                                    await _emit(on_update, {"type": "STEP", "runId": run_id, "step": step,
+                                                            "url": page.url,
+                                                            "screenshot": base64.b64encode(_png).decode("ascii")})
                             except Exception as e:  # noqa: BLE001 — RECOVER
                                 history.append({"action": act.action, "status": "error",
                                                 "error": str(e)})

@@ -1,5 +1,15 @@
 # Changelog — VendorScout
 
+## 2.5 — 2026-06-14 — Live search theater + deterministic RFQ-to-OTP
+### Added
+- **Live browser in the search itself**: a single lightweight live browser streams the real IndiaMART listings into the search cockpit (panes appear instantly, no empty wait) while TradeIndia leads stream beside it — the "running agentic view", in parallel with the lead fetch, never delaying the report.
+- **Deterministic RFQ-to-OTP flow**: "Request quote" opens the real enquiry form, fills mobile/quantity/requirement, auto-handles the one-time buyer-registration step (TradeIndia), clicks through to the **OTP/verification screen, and stops** (confirm-before-send). Mock supplier still demos the full fill→submit.
+### Fixed
+- Confirm-before-send guard no longer blocks the button that *opens* the enquiry form (it now blocks only OTP/sign-in completion).
+- Calmer search: removed the post-report background agent + dual-browser jank.
+### Docs
+- Refreshed README, deck, and added `docs/SUBMISSION.md` (500-word description + feature list + site tour + local-hosting guide).
+
 ## 2.4 — 2026-06-14 — Multi-marketplace + UI overhaul
 ### Added
 - **Multi-marketplace sourcing**: IndiaMART **+ TradeIndia** fetched in parallel, merged & ranked into one agent-curated list; per-vendor source badge, header source chip, filter-by-marketplace, coverage retry. (Flipkart excluded — HTTP 529 bot-block + B2C.)

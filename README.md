@@ -15,7 +15,7 @@ Built on the **Microsoft AI stack**: Azure AI Foundry · Azure OpenAI (GPT‑4o,
 
 ## ⚡ The 10‑second story
 
-Type *“Hitachi 1.5–2 ton ACs, bulk of 12, best price”* into one chat box. VendorScout's autonomous agent **plans** the sourcing mission, **drives a real browser** across live B2B marketplaces, **extracts and verifies** suppliers, **scores** them across nine procurement dimensions, **sends RFQ enquiries** on your behalf, and **recovers on its own** when a page breaks — then returns a ranked, decision‑ready shortlist. No tabs. No spreadsheets. No hand‑holding.
+Type *“Hitachi 1.5–2 ton ACs, bulk of 12, best price”* into one chat box. VendorScout's autonomous agent **plans** the sourcing mission, **drives a real browser** across live B2B marketplaces (**IndiaMART + TradeIndia**), **extracts and verifies** suppliers, **scores** them across nine procurement dimensions, **drafts an RFQ** and drives it to the supplier's verification gate, and **recovers on its own** when a page breaks — then returns a ranked, decision‑ready shortlist. You watch every click live. No tabs. No spreadsheets. No hand‑holding.
 
 > This is not a scraper and not a chatbot. It is an **autonomous web agent that gets the job done** — exactly what Theme 03 asks for: *navigate · extract · complete multi‑step transactions · orchestrate across services.*
 
@@ -34,14 +34,15 @@ VendorScout collapses **weeks into minutes** — a vetted, contacted shortlist b
 | Capability | What the agent does |
 |---|---|
 | 🧭 **Plans** | Turns a one‑line need into a structured sourcing strategy |
-| 🌐 **Navigates** | Drives a real Chromium browser across live marketplaces (IndiaMART, TradeIndia, the open web) |
-| 📋 **Extracts** | Pulls real suppliers, products, prices, certifications, locations — not cached data |
-| 🛡️ **Vets** | Scores compliance, financial health, risk, authenticity, reputation, capability |
-| 💸 **Compares** | 9‑dimension Multi‑Criteria Decision Analysis with a transparent market price index |
-| 🤝 **Transacts** | Opens supplier enquiry forms, fills the RFQ, and **submits** it — with a confirm‑before‑send safety gate |
-| 🔗 **Orchestrates** | Coordinates discovery, vetting, outreach and notification across multiple services |
+| 🌐 **Navigates** | Drives a real Chromium browser across live marketplaces — **IndiaMART + TradeIndia** — merged into one ranked list |
+| 👁️ **Shows its work live** | The **search itself** streams the agent's browser screen while leads fill in beside it — watch it work, on one screen, no scrolling |
+| 📋 **Extracts** | Pulls real suppliers, products, prices, locations — not cached data — each with a clickable source link |
+| 🛡️ **Vets & scores** | 9‑dimension, evidence‑based scoring with a transparent market price index; **never fabricates** — flags what needs a supplier visit |
+| 💬 **Answers questions** | Ask the report follow‑ups in plain English and get grounded answers |
+| 🤝 **Transacts** | Opens the supplier's real enquiry form, fills the RFQ, and **drives it to the OTP/verification gate — stopping there** (confirm‑before‑send). A safe demo supplier shows the full fill‑and‑submit |
+| 🧩 **Combines** | One consolidated procurement brief across every search in a session |
 | ♻️ **Recovers** | When a page changes or a step fails, it re‑reads, re‑plans, and keeps going |
-| 👁️ **Shows its work** | A live “browser theater” streams the agent's screen + its reasoning, step by step |
+| 🎬 **Theater** | A dedicated “browser theater” replays any mission step‑by‑step with the agent's reasoning |
 
 ## 🏗️ Architecture — Microsoft‑native, end to end
 
@@ -87,12 +88,12 @@ VendorScout collapses **weeks into minutes** — a vetted, contacted shortlist b
 
 Every decision the agent makes runs on **Azure OpenAI GPT‑4o**. `GET /health` reports `llm_provider: azure-openai`.
 
-## 🎬 See it / use it
+## 🎬 See it / use it (2‑minute tour)
 
-- **Source something:** https://vendorscout.lehana.in — one chat box, ranked report inline.
-- **Watch the agent browse live:** https://vendorscout.lehana.in/theater
-- **Live RFQ transaction:** the *“Send an RFQ”* mission fills & submits a supplier enquiry on camera (confirm‑before‑send).
-- **Learn the method:** https://vendorscout.lehana.in/learn
+1. **Source something** → https://vendorscout.lehana.in — type *"industrial RO membrane suppliers in India"*. Watch the **live search** (the agent's browser + leads streaming in), then read the ranked report.
+2. **Dig in** → click a card for the full **9‑factor breakdown** + source link · tick two to **compare** · **Ask this report** a question · **Request quote** to run a live RFQ · **Combined session report** to merge searches.
+3. **Watch a mission** → https://vendorscout.lehana.in/theater — presets include the **full RFQ fill‑and‑submit** on a safe demo supplier, and a **real‑site RFQ** that drives to the OTP gate and stops (confirm‑before‑send).
+4. **Learn the method** → https://vendorscout.lehana.in/learn — the nine dimensions + how it works.
 
 ## 🚀 Why it wins Theme 03
 
@@ -104,14 +105,24 @@ Every decision the agent makes runs on **Azure OpenAI GPT‑4o**. `GET /health` 
 
 ## 🧪 Run it locally
 
+**Prerequisites:** Python 3.11+, ~2 GB free disk (Chromium), and an **Azure OpenAI** resource with a `gpt-4o` deployment (endpoint, key, deployment name, API version).
+
 ```bash
 git clone https://github.com/paras-lehana/vendorscout && cd vendorscout
-cp .env.example .env          # add AZURE_OPENAI_* values
+
+cp .env.example .env          # then set AZURE_OPENAI_ENDPOINT / _API_KEY / _DEPLOYMENT / _API_VERSION
+
+# Option A — Python
 pip install -r requirements.txt
 playwright install chromium
-uvicorn app.main:app --app-dir backend --reload   # → http://localhost:8000
-# or: docker compose up --build
+uvicorn app.main:app --app-dir backend --reload    # → http://localhost:8000
+
+# Option B — Docker (Chromium bundled)
+docker compose up --build                           # → http://localhost:8000
 ```
+
+**Verify:** `http://localhost:8000/health` → `healthy`, `llm_provider: azure-openai`, `browser_agent: ready`, then open `/` and run a search.
+No Azure keys? Set `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` for any OpenAI‑compatible endpoint instead (see `.env.example`).
 
 ## 🗺️ Roadmap
 

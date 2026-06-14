@@ -246,23 +246,41 @@ async def _run_scout(run_id: str, req: ScoutRequest):
         await _emit(q, run_id, {"type": "STEP",
                                 "thought": f"IndiaMART: {len(catalog)} · TradeIndia: {len(tradeindia)} suppliers — merging across marketplaces."})
 
-        # ---- 2b. THEATER: browse a REAL listings page live (visible agentic browsing) ----
-        theater_url = cat_url or ("https://www.tradeindia.com/search.html?keyword=" + quote(search_query))
-        await _emit(q, run_id, {"type": "STEP",
-                                "thought": f"Opening the live listings page for “{search_query}” and reading the suppliers shown…"})
-        review_goal = (
-            f"You are viewing a B2B marketplace listings page for '{search_query}'. Scroll and READ the "
-            f"supplier listings already shown on THIS page — note product names, prices and locations "
-            f"into `extracted` as {{\"vendors\":[{{\"name\":..,\"product\":..,\"price\":..,\"location\":..,\"url\":..}}]}}. "
-            f"Do NOT use the search box and do NOT navigate to other sites — just review what is on this page."
-        )
-        result = await _browser.run_task_streaming(
-            url=theater_url, goal=review_goal, on_update=on_update,
-            timeout=90, max_steps=6, allow_submit=False)
-        raw = result.extracted_data if isinstance(result.extracted_data, dict) else {}
-        browser_vendors = raw.get("vendors") or raw.get("suppliers") or []
-        if not isinstance(browser_vendors, list):
-            browser_vendors = []
+        # ---- 2b. THEATER: live preview panes for BOTH marketplaces ----
+        # Both sources were already fetched in parallel above. We show each as a live
+        # pane: TradeIndia streams its found listings as rows; IndiaMART gets a REAL
+        # browser preview (single browser — reliable; two parallel browsers overloaded
+        # the shared Chromium and stalled the run). Data is unaffected either way.
+        im_url = cat_url
+
+        def _rows(vs):
+            return [{"name": v.get("name"), "price": v.get("price"),
+                     "location": v.get("location")} for v in (vs or [])[:6]]
+
+        await _emit(q, run_id, {"type": "PANES", "panes": [
+            {"site": "IndiaMART", "found": len(catalog)},
+            {"site": "TradeIndia", "found": len(tradeindia)}]})
+        await _emit(q, run_id, {"type": "PANE_DATA", "pane": "TradeIndia", "items": _rows(tradeindia),
+                                "status": (f"{len(tradeindia)} listings read" if tradeindia else "no listings")})
+        await _emit(q, run_id, {"type": "PANE_DATA", "pane": "IndiaMART", "items": _rows(catalog),
+                                "status": (f"{len(catalog)} listings" if catalog else "no listings")})
+
+        browser_vendors = []
+        if im_url:
+            async def im_cb(ev):
+                await _emit(q, run_id, {**ev, "pane": "IndiaMART"})
+            try:
+                result = await _browser.run_task_streaming(
+                    url=im_url, on_update=im_cb, timeout=75, max_steps=5, allow_submit=False,
+                    goal=(f"You are viewing the IndiaMART listings page for '{search_query}'. Scroll slowly "
+                          f"down and read the supplier listings shown — just review this page; do NOT use the "
+                          f"search box or navigate elsewhere."))
+                raw = result.extracted_data if isinstance(result.extracted_data, dict) else {}
+                browser_vendors = raw.get("vendors") or raw.get("suppliers") or []
+                if not isinstance(browser_vendors, list):
+                    browser_vendors = []
+            except Exception as e:  # noqa: BLE001
+                await _emit(q, run_id, {"type": "PANE_STATUS", "pane": "IndiaMART", "status": "preview ended"})
 
         # ---- 2c. MERGE both marketplaces (interleaved) + choose source ----
         merged = _interleave(catalog or [], tradeindia or [])

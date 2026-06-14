@@ -93,12 +93,13 @@
   </style>
 </head>
 <body class="text-slate-200">
-<div class="flex h-screen w-screen overflow-hidden" x-data="chat()" x-init="init()">
+<div class="h-screen w-screen overflow-hidden relative" x-data="chat()" x-init="init()">
 
-  <!-- ============ SIDEBAR (sessions) ============ -->
-  <aside class="shrink-0 h-full border-r border-white/10 bg-slate-950/60 backdrop-blur flex flex-col transition-all duration-200 overflow-hidden"
-         :class="sidebarOpen ? 'w-72' : 'w-0'">
-    <div class="p-3 flex flex-col h-full" x-show="sidebarOpen">
+  <!-- ============ SIDEBAR DRAWER (overlay — frees full width) ============ -->
+  <div x-show="sidebarOpen" x-cloak x-transition.opacity @click="sidebarOpen=false" class="fixed inset-0 bg-black/55 z-30"></div>
+  <aside class="fixed left-0 top-0 h-full w-72 z-40 border-r border-white/10 bg-slate-950/95 backdrop-blur flex flex-col transition-transform duration-200 will-change-transform"
+         :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'">
+    <div class="p-3 flex flex-col h-full">
       <button @click="newChat()" class="w-full mb-3 py-2 rounded-lg font-semibold text-slate-900 btn-grad">+ New sourcing chat</button>
       <div class="text-[11px] uppercase tracking-wide text-slate-500 px-1 mb-1">Your sessions</div>
       <div class="flex-1 overflow-y-auto scroll space-y-1">
@@ -121,8 +122,8 @@
     </div>
   </aside>
 
-  <!-- ============ MAIN ============ -->
-  <div class="flex-1 flex flex-col min-w-0 h-full">
+  <!-- ============ MAIN (full width) ============ -->
+  <div class="flex flex-col h-full">
     <!-- top bar -->
     <header class="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-white/10">
       <button @click="sidebarOpen=!sidebarOpen" title="Toggle chats" class="p-2 rounded-lg hover:bg-white/10">
@@ -152,7 +153,7 @@
 
     <!-- transcript (THE ONLY THING THAT SCROLLS) -->
     <main class="flex-1 overflow-y-auto scroll" x-ref="scrollArea">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-5">
+      <div class="max-w-[1500px] mx-auto px-4 sm:px-6 py-5 space-y-5">
 
         <!-- empty / welcome state -->
         <div x-show="messages.length===0" x-cloak class="text-center pt-12 sm:pt-16 fade-up">
@@ -190,53 +191,65 @@
               <div class="w-full space-y-3">
 
                 <!-- live working panel (while running) -->
-                <div x-show="m.running" class="glass rounded-2xl overflow-hidden">
+                <!-- ===== LIVE COCKPIT (while the agent works) — fits screen, no scroll ===== -->
+                <div x-show="m.running" class="glass rounded-2xl overflow-hidden fade-up">
                   <div class="progress"><i></i></div>
-                  <div class="flex items-center gap-2 px-4 py-2.5 border-b border-white/10 bg-slate-900/40 text-[13px]">
+                  <div class="flex items-center gap-2 px-4 py-2.5 border-b border-white/10 text-[13px]">
                     <span class="chrome-dot bg-emerald-400 pulse"></span>
-                    <span class="text-slate-200 font-medium" x-text="m.phaseMsg || 'Starting…'"></span>
-                    <span class="dot3 text-cyan-300"><i></i><i></i><i></i></span>
-                    <span class="ml-auto text-slate-500 text-[11px] truncate max-w-[40%]" x-text="m.currentUrl"></span>
+                    <span class="font-semibold text-slate-100 truncate" x-text="m.phaseMsg || 'Starting…'"></span>
+                    <span class="dot3 text-cyan-300 shrink-0"><i></i><i></i><i></i></span>
+                    <span class="ml-auto shrink-0 text-[11px] text-slate-500 num" x-text="m.elapsed?m.elapsed+'s':''"></span>
                   </div>
                   <!-- phase stepper -->
                   <div class="flex items-center gap-1.5 px-4 py-2 border-b border-white/10 text-[11px]">
                     <template x-for="(ph,pi) in [['plan','Plan'],['scout','Scout'],['score','Score'],['act','Act']]" :key="ph[0]">
-                      <span class="flex items-center gap-1.5">
+                      <span class="flex items-center gap-1.5 shrink-0">
                         <span class="px-2 py-0.5 rounded-full border num" :class="phaseClass(m,ph[0])" x-text="ph[1]"></span>
                         <span x-show="pi<3" class="text-slate-600">›</span>
                       </span>
                     </template>
+                    <span class="ml-auto text-[11px] text-slate-500 shrink-0 hidden sm:inline" x-show="(m.panes||[]).length">2 marketplaces in parallel</span>
                   </div>
-                  <div class="relative bg-black/40" style="aspect-ratio:16/9" x-show="m.frame">
-                    <img :src="m.frame" class="w-full h-full object-contain" alt="agent view"/>
-                  </div>
-                  <div class="px-4 py-2.5 max-h-32 overflow-y-auto scroll space-y-1.5">
-                    <template x-for="(s,i) in (m.steps||[]).slice(-5)" :key="i">
-                      <div class="stepf text-[12.5px] flex items-start gap-2" :class="s.kind==='recover' ? 'text-amber-300':'text-slate-400'">
-                        <span class="shrink-0 mt-0.5" :class="s.kind==='recover'?'text-amber-400':'text-cyan-400'" x-text="s.kind==='recover' ? '↻' : '•'"></span>
-                        <span x-text="s.text"></span>
+                  <!-- TWO LIVE PREVIEW PANES (parallel) -->
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 p-2" x-show="(m.panes||[]).length">
+                    <template x-for="pane in m.panes" :key="pane.site">
+                      <div class="rounded-xl border border-white/10 overflow-hidden bg-slate-900/40">
+                        <div class="flex items-center gap-2 px-3 py-1.5 border-b border-white/10 text-[12px]">
+                          <span class="font-semibold" :class="pane.site==='TradeIndia'?'text-teal-300':'text-indigo-300'" x-text="pane.site"></span>
+                          <span x-show="pane.found!=null" class="pill" :class="siteCls(pane.site)" x-text="pane.found+' found'"></span>
+                          <span class="ml-auto text-[11px] text-slate-500 ln1" x-text="pane.status"></span>
+                        </div>
+                        <div class="relative bg-black/50" style="aspect-ratio:16/10">
+                          <img x-show="pane.frame" :src="pane.frame" class="w-full h-full object-cover object-top" alt="live preview"/>
+                          <!-- live results rows (when no browser screenshot for this pane) -->
+                          <div x-show="!pane.frame && (pane.items||[]).length" class="absolute inset-0 overflow-hidden p-2 space-y-1">
+                            <template x-for="(it,ii) in (pane.items||[]).slice(0,5)" :key="ii">
+                              <div class="flex items-center justify-between gap-2 text-[11px] bg-white/5 rounded-md px-2 py-1.5 fade-up" :style="'animation-delay:'+(ii*70)+'ms'">
+                                <span class="ln1 text-slate-200" x-text="it.name"></span>
+                                <span class="num text-cyan-300 shrink-0" x-text="it.price||''"></span>
+                              </div>
+                            </template>
+                          </div>
+                          <div x-show="!pane.frame && !(pane.items||[]).length" class="absolute inset-0 grid place-items-center">
+                            <div class="text-center text-slate-600 text-[12px]"><span class="dot3"><i></i><i></i><i></i></span><div class="mt-1">connecting…</div></div>
+                          </div>
+                        </div>
+                        <div class="px-3 py-1.5 text-[11px] text-slate-400 ln1" style="min-height:26px" x-text="pane.step"></div>
                       </div>
                     </template>
                   </div>
-                </div>
-
-                <!-- skeleton while sourcing (before the report arrives) -->
-                <div x-show="m.running && !m.report" x-cloak class="glass rounded-2xl p-3 sm:p-4">
-                  <div class="flex items-center gap-2 mb-3">
-                    <div class="skel" style="height:18px;width:140px"></div>
-                    <div class="skel" style="height:14px;width:90px"></div>
-                  </div>
-                  <div class="skel mb-3" style="height:34px;width:100%"></div>
-                  <div class="grid sm:grid-cols-2 gap-2">
-                    <template x-for="k in [0,1,2,3]" :key="'sk'+k">
-                      <div class="rounded-xl border border-white/5 p-4">
-                        <div class="flex justify-between"><div class="skel" style="height:18px;width:55%"></div><div class="skel" style="height:18px;width:60px"></div></div>
-                        <div class="skel mt-3" style="height:11px;width:80%"></div>
-                        <div class="skel mt-3" style="height:6px;width:100%"></div>
-                        <div class="skel mt-2" style="height:6px;width:92%"></div>
-                        <div class="skel mt-2" style="height:6px;width:84%"></div>
-                      </div>
-                    </template>
+                  <!-- ALWAYS-VISIBLE agent activity ticker (latest 5) -->
+                  <div class="px-4 py-2 border-t border-white/10">
+                    <div class="text-[10px] uppercase tracking-wide text-slate-500 mb-1">Agent activity</div>
+                    <div class="space-y-1">
+                      <template x-for="(s,i) in (m.steps||[]).slice(-5)" :key="i">
+                        <div class="stepf text-[12px] flex items-start gap-2" :class="s.kind==='recover' ? 'text-amber-300':'text-slate-400'">
+                          <span class="shrink-0 mt-0.5" :class="s.kind==='recover'?'text-amber-400':'text-cyan-400'" x-text="s.kind==='recover' ? '↻' : '•'"></span>
+                          <span x-text="s.text"></span>
+                        </div>
+                      </template>
+                      <div x-show="!(m.steps||[]).length" class="text-[12px] text-slate-500">Planning the sourcing mission…</div>
+                    </div>
                   </div>
                 </div>
 
@@ -404,7 +417,7 @@
                           </template>
                           <span class="ml-auto text-[12px] text-slate-500 num" x-text="viewVendors(m).length+' shown'"></span>
                         </div>
-                        <div :class="density==='compact' ? 'grid sm:grid-cols-2 lg:grid-cols-3 gap-2' : 'grid sm:grid-cols-2 gap-2'">
+                        <div :class="density==='compact' ? 'grid sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2.5' : 'grid sm:grid-cols-2 xl:grid-cols-3 gap-2.5'">
                           <template x-for="o in viewVendors(m)" :key="o.i">
                             <div class="fcard fade-up" :style="'animation-delay:'+(o.i*45)+'ms'"
                                  :class="(density==='compact'?'p-3':'p-5')+' '+((m.compare||[]).includes(o.i)?'sel':((m.compare||[]).length===1?'dim':''))">
@@ -539,7 +552,7 @@
 <script>
 function chat(){
   return {
-    sidebarOpen:true, sessions:[], currentId:null, messages:[], input:"", busy:false, theme:'aurora', density:'comfortable',
+    sidebarOpen:false, sessions:[], currentId:null, messages:[], input:"", busy:false, theme:'aurora', density:'comfortable',
     setTheme(t){ this.theme=t||'aurora'; const el=document.documentElement; if(this.theme==='aurora') el.removeAttribute('data-theme'); else el.setAttribute('data-theme',this.theme); try{ localStorage.setItem('vs:theme',this.theme); }catch{} },
     toggleDensity(){ this.density = this.density==='compact'?'comfortable':'compact'; try{ localStorage.setItem('vs:density',this.density); }catch{} },
     examples:[
@@ -614,13 +627,13 @@ function chat(){
       localStorage.setItem('vs:sessions', JSON.stringify(this.sessions.slice(0,50)));
       localStorage.setItem('vs:current', this.currentId||'');
     },
-    newChat(){ this.currentId=null; this.messages=[]; this.input=""; if(window.innerWidth<768) this.sidebarOpen=false; },
+    newChat(){ this.currentId=null; this.messages=[]; this.input=""; this.sidebarOpen=false; },
     deleteSession(id){ this.sessions=this.sessions.filter(s=>s.id!==id); if(this.currentId===id){ this.currentId=null; this.messages=[]; } try{ localStorage.setItem('vs:sessions',JSON.stringify(this.sessions.slice(0,50))); localStorage.setItem('vs:current',this.currentId||''); }catch{} },
     renameSession(id){ const s=this.sessions.find(x=>x.id===id); if(!s) return; const t=prompt('Rename this chat:', s.title||''); if(t!==null){ s.title=(t.trim()||s.title); try{ localStorage.setItem('vs:sessions',JSON.stringify(this.sessions.slice(0,50))); }catch{} } },
     loadSession(id){
       const s=this.sessions.find(s=>s.id===id); if(!s) return;
       this.currentId=id; this.messages=s.messages||[];
-      if(window.innerWidth<768) this.sidebarOpen=false;
+      this.sidebarOpen=false;
       this.scrollDown();
     },
     scrollDown(){ this.$nextTick(()=>{ const el=this.$refs.scrollArea; if(el) el.scrollTop=el.scrollHeight; }); },
@@ -629,9 +642,10 @@ function chat(){
       this.input=""; this.busy=true;
       if(!this.currentId){ this.currentId='s'+Math.abs(Date.now()|0)+Math.floor(performance.now()); this.sessions.unshift({id:this.currentId,title:q.slice(0,40),messages:[]}); }
       this.messages.push({role:'user',text:q});
-      this.messages.push({role:'assistant',running:true,phaseMsg:'Starting…',frame:null,currentUrl:'',steps:[],report:null,error:null,meta:'',runId:null,qa:[],ask:'',asking:false,action:null,compare:[],detail:null,sort:'rank',filter:'all',copied:false,phase:''});
+      this.messages.push({role:'assistant',running:true,phaseMsg:'Starting…',frame:null,currentUrl:'',steps:[],report:null,error:null,meta:'',runId:null,qa:[],ask:'',asking:false,action:null,compare:[],detail:null,sort:'rank',filter:'all',copied:false,phase:'',panes:[],elapsed:0,minimized:false,_t0:0});
       // IMPORTANT: mutate the reactive proxy element (not the raw object) so Alpine re-renders.
       const m=this.messages[this.messages.length-1];
+      m._t0=performance.now();
       this.persist(); this.scrollDown();
       let r;
       try{ r=await (await fetch('/api/scout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q})})).json(); }
@@ -641,10 +655,19 @@ function chat(){
       es.onmessage=(msg)=>{
         let ev; try{ ev=JSON.parse(msg.data); }catch{ return; }
         const t=ev.type;
-        if(t==='PHASE'){ m.phaseMsg=ev.message; if(ev.phase) m.phase=ev.phase; }
-        else if(t==='STEP'){ if(ev.screenshot) m.frame='data:image/jpeg;base64,'+ev.screenshot; if(ev.url) m.currentUrl=ev.url; if(ev.thought) m.steps.push({kind:'step',text:ev.thought}); this.scrollDown(); }
-        else if(t==='RECOVER'){ m.steps.push({kind:'recover',text:ev.message||'re-planning'}); }
-        else if(t==='SCOUTED'){ m.phaseMsg='Found '+ev.count+' suppliers · scoring…'; }
+        if(m._t0) m.elapsed=Math.round((performance.now()-m._t0)/1000);
+        const pane = ev.pane ? (m.panes||[]).find(p=>p.site===ev.pane) : null;
+        if(t==='PANES'){ m.panes=(ev.panes||[]).map(pp=>({site:pp.site,found:pp.found,frame:null,status:'Opening…',step:'',items:[]})); }
+        else if(t==='PANE_DATA'){ if(pane){ pane.items=ev.items||[]; if(ev.status) pane.status=ev.status; } }
+        else if(t==='PANE_STATUS'){ if(pane) pane.status=ev.status; }
+        else if(t==='PHASE'){ m.phaseMsg=ev.message; if(ev.phase) m.phase=ev.phase; }
+        else if(t==='STEP'){
+          if(ev.thought) m.steps.push({kind:'step',text:(ev.pane?('['+ev.pane+'] '):'')+ev.thought});
+          if(pane){ if(ev.screenshot) pane.frame='data:image/jpeg;base64,'+ev.screenshot; if(ev.thought) pane.step=ev.thought; pane.status='Browsing…'; }
+          this.scrollDown();
+        }
+        else if(t==='RECOVER'){ m.steps.push({kind:'recover',text:(ev.pane?('['+ev.pane+'] '):'')+(ev.message||'re-planning')}); if(pane) pane.step=ev.message||'recovering'; }
+        else if(t==='SCOUTED'){ m.phaseMsg='Found '+ev.count+' suppliers · scoring…'; (m.panes||[]).forEach(p=>{p.status='done';}); }
         else if(t==='REPORT'){ m.report=ev.report; m.meta=(ev.num_steps?ev.num_steps+' steps · ':'')+(ev.duration_ms?Math.round(ev.duration_ms/1000)+'s':''); if(this.messages[this.messages.length-1]===m) this.busy=false; this.persist(); this.scrollDown(); /* free the UI now; the agent keeps auto-drafting the enquiry in the background */ }
         else if(t==='ACTION'){ m.action=ev.result; this.persist(); this.scrollDown(); }
         else if(t==='ERROR'){ m.error=ev.message; m.running=false; if(this.messages[this.messages.length-1]===m) this.busy=false; }

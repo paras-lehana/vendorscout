@@ -32,7 +32,7 @@
     [data-theme=light] .bg-slate-900\/40,[data-theme=light] .bg-slate-900\/60,[data-theme=light] .bg-slate-800\/60{background:#f1f5f9!important}
     [data-theme=light] .bg-white\/5{background:#eef2f7!important}
     body{background:var(--bg)!important;font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:-.005em}
-    .grad{background:linear-gradient(90deg,var(--g1),var(--g2),var(--g3))!important;background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:gslide 6s linear infinite}
+    .grad{background-image:linear-gradient(90deg,var(--g1),var(--g2),var(--g3))!important;background-size:200% auto;-webkit-background-clip:text!important;background-clip:text!important;-webkit-text-fill-color:transparent!important;color:transparent;animation:gslide 6s linear infinite}
     @keyframes gslide{to{background-position:200% center}}
   </style>
   <script>(function(){try{var t=localStorage.getItem('vs:theme');if(t&&['sunset','royal','mono','light'].indexOf(t)>-1)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>

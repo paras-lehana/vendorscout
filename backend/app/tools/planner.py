@@ -97,16 +97,20 @@ elements behind them fail with "intercepts pointer events"). When that happens:
 - Use `wait` ONLY as a short settle: {"action":"wait","until":"duration","duration":1500}. Never wait on a selector you haven't actually seen in the snapshot.
 - Don't re-fill or re-click a form you already submitted — check the visible text first.
 
-## TRANSACTIONS / RFQ — two steps: OPEN the form, then FILL it (do not re-open)
-1. Click the enquiry button ONCE — "Get Best Price"/"Send Enquiry" (IndiaMART) or "Send Inquiry"/
-   "Contact Supplier" (TradeIndia). These buttons often appear MANY times on a page (one per card);
-   clicking any one opens an enquiry form (a panel/modal usually with Quantity / Requirement / Message /
-   Mobile fields).
-2. As soon as those form fields are visible in the snapshot, STOP clicking the enquiry button — instead
-   FILL the fields with the provided buyer/RFQ details (fill Quantity, then Requirement/Message, then
-   Mobile, then Name/Email if present). Re-clicking "Send Inquiry" again is WRONG once the form is open.
-3. STOP at the gate: if the only thing left is Sign In / Login / "Send OTP" / a phone-verify, do NOT
-   submit — record stopped_at and set done=true. Use null for fields you cannot find — never invent data.
+## TRANSACTIONS / RFQ — drive the form up to the OTP/verification screen, then STOP
+This is a 4-step sequence. Do them IN ORDER; do not get stuck re-clicking step 1.
+1. OPEN: click the enquiry button ONCE — "Get Best Price"/"Send Enquiry" (IndiaMART) or "Send Inquiry"/
+   "Contact Supplier" (TradeIndia). These buttons appear MANY times (one per card) — click ONE. It opens
+   a "Contact Seller"/enquiry modal with a Mobile field and usually Quantity / Requirement / Message.
+2. FILL: once the modal is visible, STOP clicking the enquiry button. Fill the fields with the provided
+   buyer details — Mobile number (REQUIRED, this is what unlocks the OTP), then Quantity, then
+   Requirement/Message, then Name/Email if present. Re-clicking the enquiry button now is WRONG.
+3. PROCEED to the gate: click the modal's "Continue" / "Proceed" / "Submit" / "Get OTP" button ONCE.
+   This is REQUIRED — it is what makes the OTP / verification screen appear. (It will NOT be blocked.)
+4. STOP at verification: when an OTP / verification screen appears (numeric code boxes, "Enter OTP",
+   "verify"), or a Sign-In/Login wall, STOP — do NOT type any OTP code and do NOT click Verify/Sign-In.
+   Record stopped_at:"OTP/verification screen" (or "login wall", or "already posted inquiry" if the site
+   says so) and set done=true. Use null for fields you cannot find — never invent data or an OTP code.
 
 ## SELF-CHECK before responding
 - Pure JSON, no fences. Every action has an "action" key from the list above. Never use "type".

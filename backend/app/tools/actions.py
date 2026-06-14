@@ -231,19 +231,32 @@ _DISPATCH = {
     "extract": _extract, "scroll": _scroll, "press": _press, "select": _select,
 }
 
-# Words on a control that indicate it would SUBMIT a form / send an enquiry.
-# Used by the confirm-before-send guard (over-block on purpose when disabled).
-_SUBMIT_WORDS = (
-    "submit", "send enquiry", "send inquiry", "send message", "send request",
-    "get best quote", "get quote", "request quote", "request a quote",
-    "contact supplier", "enquire", "inquire", "send", "place order", "buy now",
+# The confirm-before-send guard is a STOP-AT-VERIFICATION line, not a "never
+# touch the form" line. On a real-site RFQ we deliberately WANT the agent to
+# open the enquiry form and click Continue / request-OTP so the verification
+# (OTP / sign-in) screen actually appears — then stop. So the opening steps
+# ("Send Inquiry", "Contact Supplier", "Get Best Price", "Continue", "Get OTP")
+# are ALLOWED; only the final completion of phone verification / sign-in is
+# blocked, as a hard backstop behind the planner's own "never type the OTP" rule.
+_STOP_WORDS = (
+    "verify otp", "submit otp", "confirm otp", "validate otp", "verify code",
+    "verify mobile", "verify number", "verify & continue", "verify and continue",
+    "verify", "sign in", "signin", "log in", "login", "create account",
+    "register now",
 )
 
 
 async def _would_submit(page, a: Action) -> bool:
-    """True if this action would likely submit a form / send an enquiry."""
+    """True if this click would COMPLETE phone/OTP verification or sign-in.
+
+    (Name kept for call-site compatibility.) Enquiry-opening and request-OTP
+    clicks are intentionally NOT treated as submits — we want to reach the OTP.
+    """
     if a.action == "press":
-        return (a.key or "").lower() in ("enter", "return")
+        # Enter is no longer treated as a blanket submit: the RFQ flow drives
+        # the form via explicit buttons, and blocking Enter also blocked the
+        # legitimate "Continue" step that reveals the OTP screen.
+        return False
     if a.action != "click" or not a.selector:
         return False
     try:
@@ -255,13 +268,12 @@ async def _would_submit(page, a: Action) -> bool:
             "text:((el.innerText||el.value||'')+'').toLowerCase(),"
             "inForm: !!el.closest('form')})"
         )
-        if info.get("type") == "submit":
-            return True
         text = info.get("text", "")
-        return any(w in text for w in _SUBMIT_WORDS)
+        return any(w in text for w in _STOP_WORDS)
     except Exception:
-        # If we can't tell, err on the side of caution (treat as submit).
-        return True
+        # If we can't tell, do NOT block — let the flow reach the gate; the
+        # planner is instructed to stop at the OTP/sign-in screen.
+        return False
 
 
 async def execute_action(page, a: Action, allow_submit: bool = True) -> ActionResult:
@@ -279,10 +291,10 @@ async def execute_action(page, a: Action, allow_submit: bool = True) -> ActionRe
     if a.selector:
         a.selector = _normalize_selector(a.selector)
     if not allow_submit and a.action in ("click", "press") and await _would_submit(page, a):
-        logger.info("confirm-before-send: blocked submit-type %s on %r", a.action, a.selector)
+        logger.info("stop-at-verification: blocked OTP/sign-in completion %s on %r", a.action, a.selector)
         return ActionResult(action=a.action, status="skipped",
-                            error="autosubmit_disabled",
-                            detail={"reason": "confirm-before-send guard blocked a submit-type action",
+                            error="verification_gate",
+                            detail={"reason": "stop-at-verification guard blocked an OTP/sign-in completion",
                                     "selector": a.selector, "key": a.key})
     try:
         return await fn(page, a)

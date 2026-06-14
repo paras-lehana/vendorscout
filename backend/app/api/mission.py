@@ -39,6 +39,9 @@ class MissionRequest(BaseModel):
     url: str = "https://www.indiamart.com"
     max_steps: int | None = None
     allow_submit: bool | None = None   # confirm-before-send override (transaction demos)
+    rfq: bool = False                  # deterministic RFQ-to-OTP flow (not the LLM loop)
+    site: str = ""                     # marketplace label for the RFQ flow
+    name: str = ""                     # product/supplier label for the RFQ flow
 
 
 async def _run_mission(run_id: str, req: MissionRequest):
@@ -55,10 +58,21 @@ async def _run_mission(run_id: str, req: MissionRequest):
             pass
 
     try:
-        result = await _client.run_task_streaming(
-            url=req.url, goal=req.goal, on_update=on_update,
-            timeout=240, max_steps=req.max_steps, allow_submit=req.allow_submit,
-        )
+        if req.rfq:
+            # Deterministic Request-for-Quote: drive the enquiry form to the OTP
+            # gate and stop. Reliable + watchable; not subject to LLM re-click loops.
+            result = await _client.run_rfq_streaming(
+                url=req.url, site=req.site, name=req.name,
+                on_update=on_update, timeout=240,
+            )
+            await on_update({"type": "COMPLETE", "runId": run_id,
+                             "status": "COMPLETED" if result.success else "FAILED",
+                             "resultJson": result.extracted_data})
+        else:
+            result = await _client.run_task_streaming(
+                url=req.url, goal=req.goal, on_update=on_update,
+                timeout=240, max_steps=req.max_steps, allow_submit=req.allow_submit,
+            )
         state["status"] = "completed" if result.success else "failed"
         state["result"] = {
             "success": result.success,

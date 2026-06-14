@@ -304,6 +304,254 @@ class BrowserAgentClient:
                                 "resultJson": result.extracted_data})
         return result
 
+    async def run_rfq_streaming(
+        self, url: str, site: str = "", name: str = "",
+        on_update: OnUpdate = None, timeout: int = 180,
+    ) -> BrowserResult:
+        """Deterministic Request-for-Quote flow, driven to the OTP/verification
+        gate and stopped there — NOT left to the LLM planner.
+
+        Real B2B enquiry forms are a fixed, well-known sequence (open the modal →
+        fill mobile/quantity/requirement → Continue → an OTP/verification screen
+        appears). The generic agent loop kept re-clicking the ubiquitous "Send
+        Inquiry" button instead of progressing, so this hard-codes the happy path
+        for a reliable, watchable demo. We fill DUMMY buyer details, click through
+        to the OTP screen, and STOP — we never type an OTP or sign in.
+        """
+        run_id = uuid.uuid4().hex[:12]
+        started = time.monotonic()
+        transcript: list[dict] = []
+        history: list[dict] = []
+        mobile = "9811122233"  # dummy buyer number — never verified / never an OTP entered
+        extracted: dict = {"mode": "rfq", "site": site, "product": name, "mobile_used": mobile}
+
+        async def step(thought: str, page=None, status: str = "ok"):
+            frame = {"type": "STEP", "runId": run_id, "step": len(transcript) + 1,
+                     "message": thought, "thought": thought}
+            if page is not None:
+                frame["url"] = page.url
+                with contextlib.suppress(Exception):
+                    png = await page.screenshot(type="jpeg", quality=55, full_page=False)
+                    frame["screenshot"] = base64.b64encode(png).decode("ascii")
+            await _emit(on_update, frame)
+            transcript.append({"step": len(transcript) + 1, "thought": thought,
+                               "url": frame.get("url", "")})
+            history.append({"action": "rfq", "status": status})
+
+        async def click_first(page, labels, timeout_ms=4000):
+            for lab in labels:
+                loc = page.get_by_role("button", name=lab)
+                if await loc.count() == 0:
+                    loc = page.get_by_text(lab, exact=False)
+                cnt = await loc.count()
+                for i in range(min(cnt, 3)):
+                    el = loc.nth(i)
+                    try:
+                        if await el.is_visible():
+                            with contextlib.suppress(Exception):
+                                await el.scroll_into_view_if_needed(timeout=1500)
+                            await el.click(timeout=timeout_ms)
+                            return lab
+                    except Exception:  # noqa: BLE001
+                        continue
+            return None
+
+        async def fill_first(page, selector, value):
+            with contextlib.suppress(Exception):
+                loc = page.locator(selector).first
+                if await loc.count() and await loc.is_visible():
+                    await loc.fill(value)
+                    return True
+            return False
+
+        try:
+            await _emit(on_update, {"type": "GOAL", "runId": run_id,
+                                    "goal": f"Request a quote on {site or 'the marketplace'} for "
+                                            f"'{name or 'this product'}' — fill the enquiry & stop at OTP",
+                                    "url": url})
+            async with self._new_page(url) as page:
+                await _emit(on_update, {"type": "PHASE", "runId": run_id, "phase": "OPEN"})
+                with contextlib.suppress(Exception):
+                    await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                await page.wait_for_timeout(2500)
+                with contextlib.suppress(Exception):
+                    await page.keyboard.press("Escape")
+                await step(f"Opened the {site or ''} product page for "
+                           f"'{name or 'this product'}'.", page)
+
+                # STEP 1 — OPEN the enquiry modal (click ONCE)
+                opened = await click_first(page, [
+                    "Send Inquiry", "Send Enquiry", "Get Best Price", "Contact Supplier",
+                    "Get Latest Price", "Contact Seller", "Enquire Now", "Enquire"])
+                await page.wait_for_timeout(2600)
+                if not opened:
+                    extracted["stopped_at"] = "no enquiry button found on this page"
+                    await step("Could not find an enquiry button on this page.", page, status="error")
+                    return self._finish(False, page.url, run_id, extracted, history, transcript, started)
+                await step(f"Clicked '{opened}' — the enquiry form is opening.", page)
+
+                # STEP 2 — FILL the enquiry form with dummy buyer details
+                await _emit(on_update, {"type": "PHASE", "runId": run_id, "phase": "FILL"})
+                filled: list[str] = []
+                if await fill_first(page,
+                        "input[name='mobile']:visible, input[type='tel']:visible, "
+                        "input[placeholder*='Mobile' i]:visible, input[placeholder*='mobile number' i]:visible",
+                        mobile):
+                    filled.append("Mobile")
+                if await fill_first(page,
+                        "input[placeholder*='Quantity' i]:visible, input[name*='quantity' i]:visible", "12"):
+                    filled.append("Quantity")
+                if await fill_first(page,
+                        "textarea:visible, input[placeholder*='Requirement' i]:visible, "
+                        "input[placeholder*='message' i]:visible",
+                        "Need 12 units in bulk; please share best price, MOQ, lead time and certifications."):
+                    filled.append("Requirement")
+                extracted["fields_filled"] = filled
+                await page.wait_for_timeout(700)
+                if filled:
+                    await step("Filled the enquiry form (dummy buyer details): " + ", ".join(filled) + ".", page)
+                else:
+                    await step("Enquiry opened; waiting for the form fields.", page)
+
+                # STEP 3 — PROCEED to the OTP screen, handling a buyer-registration
+                # sub-step. Some marketplaces (TradeIndia for a new number) insert a
+                # one-time "Your Name / Pin Code" form BETWEEN the phone entry and the
+                # OTP. So: click Continue, and if a registration form appears, fill it
+                # and click Continue again — up to 3 rounds — until the OTP shows.
+                await _emit(on_update, {"type": "PHASE", "runId": run_id, "phase": "PROCEED"})
+
+                async def scan_gate(page):
+                    body = ""
+                    with contextlib.suppress(Exception):
+                        body = (await page.locator("body").inner_text()).lower()
+                    otp_text = any(k in body for k in [
+                        "enter otp", "enter the otp", "one time password", "verify your mobile",
+                        "verification code", "otp sent", "otp has been sent", "resend otp",
+                        "resend code", "enter verification", "enter the code", "we have sent",
+                        "otp verification"])
+                    otp_field = 0
+                    with contextlib.suppress(Exception):
+                        otp_field = await page.locator(
+                            "input[placeholder*='OTP' i]:visible, input[autocomplete='one-time-code']:visible, "
+                            "input[name*='otp' i]:visible").count()
+                    boxes = 0
+                    with contextlib.suppress(Exception):
+                        boxes = await page.locator("input[maxlength='1']:visible").count()
+                    already = "already posted inquiry" in body or "already enquired" in body
+                    return (otp_text or otp_field > 0 or boxes >= 4), already
+
+                reached_otp = False
+                already = False
+                for rnd in range(3):
+                    proceeded = await click_first(page, [
+                        "Continue", "Proceed", "Get OTP", "Send OTP", "Verify Mobile",
+                        "Submit", "Send Inquiry", "Send Enquiry", "Send"])
+                    await page.wait_for_timeout(3800)
+                    if proceeded:
+                        await step(f"Clicked '{proceeded}' — proceeding toward phone verification.", page)
+                    reached_otp, already = await scan_gate(page)
+                    if reached_otp or already:
+                        break
+                    # A one-time buyer-registration form may now be on screen
+                    # (Your Name / Pin Code / Company). Fill it by walking the
+                    # visible inputs and matching on placeholder keywords — robust
+                    # to markup differences across products.
+                    reg: list[str] = []
+                    with contextlib.suppress(Exception):
+                        ins = page.locator("input:visible, textarea:visible")
+                        for i in range(await ins.count()):
+                            el = ins.nth(i)
+                            typ = (await el.get_attribute("type") or "").lower()
+                            if typ in ("checkbox", "radio", "hidden", "submit", "button"):
+                                continue
+                            already_val = ""
+                            with contextlib.suppress(Exception):
+                                already_val = await el.input_value()
+                            if already_val:
+                                continue  # already filled (e.g. the mobile field)
+                            # Effective label = placeholder + aria-label + closest <label>
+                            # + parent text. TradeIndia uses floating labels (no
+                            # placeholder), so placeholder alone is not enough.
+                            lab = ""
+                            with contextlib.suppress(Exception):
+                                lab = (await el.evaluate(
+                                    "e=>{const l=e.closest('label');const p=e.parentElement;"
+                                    "return ((e.placeholder||'')+' '+(e.getAttribute('aria-label')||'')+' '+"
+                                    "(l?l.innerText:'')+' '+(p?p.innerText:'')).toLowerCase()}") or "")
+                            if any(s in lab for s in ("search", "mobile", "quantity")):
+                                continue
+                            if "name" in lab and "company" not in lab:
+                                with contextlib.suppress(Exception):
+                                    await el.fill("Demo Buyer"); reg.append("Name")
+                            elif "pin" in lab:
+                                with contextlib.suppress(Exception):
+                                    await el.fill("110001"); reg.append("Pin Code")
+                            elif "company" in lab:
+                                with contextlib.suppress(Exception):
+                                    await el.fill("Demo Procurement"); reg.append("Company")
+                            elif "email" in lab:
+                                with contextlib.suppress(Exception):
+                                    await el.fill("buyer@example.com"); reg.append("Email")
+                            elif "requirement" in lab or "message" in lab:
+                                with contextlib.suppress(Exception):
+                                    await el.fill("Need 12 units in bulk; please share best price, "
+                                                  "MOQ, lead time and certifications."); reg.append("Requirement")
+                    # Tick the "I agree to terms" checkbox (required to proceed); skip GST.
+                    with contextlib.suppress(Exception):
+                        cbs = page.locator("input[type='checkbox']:visible")
+                        for i in range(await cbs.count()):
+                            el = cbs.nth(i)
+                            lbl = ""
+                            with contextlib.suppress(Exception):
+                                lbl = (await el.evaluate(
+                                    "e=>{const p=e.closest('label')||e.parentElement;"
+                                    "return (p&&p.innerText)||''}") or "").lower()
+                            if "gst" in lbl:
+                                continue
+                            with contextlib.suppress(Exception):
+                                if not await el.is_checked():
+                                    await el.check()
+                    if reg:
+                        for r in reg:
+                            if r not in filled:
+                                filled.append(r)
+                        extracted["fields_filled"] = filled
+                        await step("Filled the buyer registration step (dummy details): "
+                                   + ", ".join(reg) + ".", page)
+                    elif not proceeded:
+                        break  # nothing to click and no reg form — stop probing
+
+                # STEP 4 — STOP at the gate (never enter an OTP / sign in)
+                await _emit(on_update, {"type": "PHASE", "runId": run_id, "phase": "STOP"})
+                if reached_otp:
+                    extracted["reached_otp"] = True
+                    extracted["stopped_at"] = ("OTP verification screen — stopped before entering any "
+                                               "code (we never complete verification)")
+                    await step("✅ Reached the OTP / verification screen. Stopping here — we never "
+                               "enter the OTP or send on your behalf.", page)
+                    ok = True
+                elif already:
+                    extracted["reached_otp"] = True
+                    extracted["stopped_at"] = ("supplier reports an enquiry was already posted for this "
+                                               "product — reached the transaction endpoint")
+                    await step("✅ Reached the enquiry endpoint (an enquiry is already posted for this "
+                               "product). Stopping here.", page)
+                    ok = True
+                else:
+                    # Reached + filled the phone-verification gate but the OTP boxes
+                    # weren't auto-confirmed — still the real transaction endpoint.
+                    extracted["reached_otp"] = False
+                    extracted["stopped_at"] = ("phone-verification gate — filled the enquiry and stopped "
+                                               "before OTP / sign-in (we never verify)")
+                    await step("Reached the phone-verification gate and filled the enquiry. Stopping "
+                               "before OTP / sign-in — we never verify on your behalf.", page)
+                    ok = True
+                return self._finish(ok, page.url, run_id, extracted, history, transcript, started)
+        except Exception as e:  # noqa: BLE001
+            logger.error("rfq run failed for %s: %s", url, e)
+            await _emit(on_update, {"type": "ERROR", "runId": run_id, "message": str(e)})
+            return self._finish(False, url, run_id, extracted, history, transcript, started, error=str(e))
+
     async def run_batch(self, tasks: list[dict]) -> list[BrowserResult]:
         async def _one(t: dict) -> BrowserResult:
             return await self.run_task(

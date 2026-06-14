@@ -81,7 +81,7 @@
       </div>
       <div class="flex gap-2 mt-3 flex-wrap" x-show="!running">
         <template x-for="ex in examples" :key="ex.goal">
-          <button @click="goal=ex.goal; url=ex.url; allowSubmit=!!ex.submit"
+          <button @click="goal=ex.goal; url=ex.url; allowSubmit=!!ex.submit; isRfq=!!ex.rfq; rfqSite=ex.site||''; rfqName=ex.name||''"
                   class="text-xs px-3 py-1 rounded-full glass hover:border-indigo-400 text-slate-300" x-text="ex.label"></button>
         </template>
       </div>
@@ -151,17 +151,18 @@
         goal: "Search IndiaMART for industrial RO membrane water purifier suppliers and extract the top 5 company names, their products and any prices shown.",
         url: "https://www.indiamart.com",
         running:false, status:"idle", frame:null, currentUrl:"", steps:[], stepCount:0, result:null, goalShown:"", allowSubmit:false,
+        isRfq:false, rfqSite:"", rfqName:"",
         examples:[
           {label:"⚡ Instant demo (example.com · ~4s)", url:"https://example.com", goal:"Read the page heading and return it as JSON {heading} then finish."},
           {label:"🏭 IndiaMART · RO membranes (~30s)", url:"https://www.indiamart.com", goal:"Search IndiaMART for industrial RO membrane suppliers and extract the top 5 company names, products and prices as JSON {suppliers:[{name,product,price,location}]}."},
           {label:"🤝 Send an RFQ — live transaction demo (~25s)", url:"/mock/supplier", submit:true, goal:"On this supplier page, complete a Request-for-Quote: open/scroll to the 'Send Enquiry' form, fill product='8040 RO membrane, 5000 GPD', quantity='500 pieces', name='VendorScout Buyer', email='sourcing@vendorscout.demo', phone='9999999999', message='Please share best quote, MOQ, lead time and certifications.', then SUBMIT the form. Verify the success acknowledgement and return JSON {submitted:true, reference:<the acknowledgement reference shown>}."},
-          {label:"📨 Real RFQ on IndiaMART (fill & stop at OTP)", url:"https://dir.indiamart.com/impcat/hitachi-air-conditioner.html", submit:false, goal:"You are on a REAL IndiaMART listings page. Open the first product's page, then start a Request-for-Quote. Click 'Get Best Price' / 'Send Enquiry' ONE TIME (it repeats per card — click only the first). Then: if an enquiry FORM opened inline (Quantity / Requirement / Mobile visible), FILL it with DUMMY buyer details — Quantity:'12', Requirement/Message:'Need 12 units in bulk; please share best price, MOQ, lead time and certifications.', Mobile:'9000000000', Name:'Demo Buyer', Email:'buyer@example.com' — then STOP at the Sign-In/OTP gate. If instead a Login / Sign-In / 'Send OTP' wall appeared (IndiaMART requires login to send an enquiry), that IS your stop point — record it and finish; do NOT keep clicking. Do NOT submit/send (we confirm before sending). Return JSON {filled:<true/false>, fields_filled:[...], stopped_at:'<the Sign-In/OTP/login gate you reached>'}."},
+          {label:"📨 Real RFQ on IndiaMART (fill & stop at OTP)", url:"https://dir.indiamart.com/impcat/hitachi-air-conditioner.html", submit:false, rfq:true, site:"IndiaMART", name:"Hitachi Air Conditioner", goal:"You are on a REAL IndiaMART listings page. Open the first product's page, then complete a Request-for-Quote UP TO the OTP/verification screen, then stop. IN ORDER: STEP 1 (OPEN) click 'Get Best Price' / 'Send Enquiry' ONE TIME (it repeats per card — click only the first); an enquiry form/modal opens with a Mobile field. STEP 2 (FILL) fill Mobile:'9811122233' (this unlocks the OTP), Quantity:'12', Requirement/Message:'Need 12 units in bulk; please share best price, MOQ, lead time and certifications.', Name:'Demo Buyer', Email:'buyer@example.com' — do NOT click the enquiry button again. STEP 3 (PROCEED) click the form's 'Continue' / 'Submit' / 'Get Best Price' / 'Send' button ONCE to reach verification. STEP 4 (STOP) when the OTP / verification screen appears (code boxes / 'Enter OTP' / 'verify') or a Sign-In wall, STOP — do NOT type an OTP or click Verify/Sign-In. Set done=true, record stopped_at:'OTP verification screen' (or 'login wall'). Return JSON {filled:<true/false>, fields_filled:[...], reached_otp:<true/false>, stopped_at:'<the gate you reached>'}."},
           {label:"🔌 IndiaMART · LED drivers (~30s)", url:"https://dir.indiamart.com/impcat/led-driver.html", goal:"You are on a real IndiaMART listings page for LED drivers. Read the supplier listings shown — company names, locations and prices — and return JSON {suppliers:[{name,product,price,location}]}. Do not use the search box."},
         ],
         statusColor(){ return this.status==='running'?'text-emerald-300':(this.status==='completed'?'text-emerald-300':(this.status==='failed'?'text-amber-300':'text-slate-400')); },
         rfqGoal(name,site){
           const s = site || "this marketplace";
-          return "On this "+s+" product page"+(name?(" for '"+name+"'"):"")+", start a Request-for-Quote. STEP 1: click the enquiry button ONE TIME — 'Get Best Price' / 'Send Enquiry' on IndiaMART, or 'Send Inquiry' / 'Contact Supplier' on TradeIndia. These buttons repeat once per card — click only the FIRST one, never click it again. STEP 2: look at what appeared. (a) If an enquiry FORM opened inline (Quantity / Requirement / Message / Mobile fields are now visible), FILL it with DUMMY buyer details — Quantity:'12', Requirement/Message:'Need 12 units in bulk; please share best price, MOQ, lead time and certifications.', Mobile:'9000000000', Name:'Demo Buyer', Email:'buyer@example.com' — then STOP at the Sign-In/Send-OTP/Submit gate (do NOT sign in or submit; we confirm before sending). (b) If instead a Login / Sign-In / 'Send OTP' wall appeared (these marketplaces require login to send an enquiry), that IS your stop point — record it and finish immediately; do NOT keep clicking. Set done=true after one click + (fill-or-gate). Return JSON {filled:<true/false>, fields_filled:[...], stopped_at:'<the Sign-In/OTP/login gate you reached>'}.";
+          return "On this "+s+" product page"+(name?(" for '"+name+"'"):"")+", complete a Request-for-Quote UP TO the OTP/verification screen, then stop. Do these steps IN ORDER. STEP 1 (OPEN): click the enquiry button ONE TIME — 'Get Best Price' / 'Send Enquiry' on IndiaMART, or 'Send Inquiry' / 'Contact Supplier' on TradeIndia. It repeats per card; click only the FIRST. A 'Contact Seller'/enquiry modal opens with a Mobile field. STEP 2 (FILL): in that modal, fill the Mobile number field with '9811122233' (this unlocks the OTP), and fill Quantity:'12' and Requirement/Message:'Need 12 units in bulk; please share best price, MOQ, lead time and certifications.' (and Name:'Demo Buyer', Email:'buyer@example.com' if present). Do NOT click the enquiry button again. STEP 3 (PROCEED): click the modal's 'Continue' / 'Proceed' / 'Submit' / 'Get OTP' button ONCE — this makes the OTP screen appear. STEP 4 (STOP): when the OTP / verification screen appears (numeric code boxes / 'Enter OTP' / 'verify'), STOP — do NOT type any OTP and do NOT click Verify/Sign-In. Set done=true and record stopped_at:'OTP verification screen' (or 'already posted inquiry' if the site shows that, or 'login wall'). Return JSON {filled:<true/false>, fields_filled:[...], reached_otp:<true/false>, stopped_at:'<the gate you reached>'}.";
         },
         init(){
           // Deep-link from the chat report: /theater?url=<product>&rfq=1&name=<supplier>&site=<IndiaMART|TradeIndia>
@@ -169,7 +170,7 @@
             const p = new URLSearchParams(location.search);
             const u = p.get('url');
             if(u) this.url = u;
-            if(p.get('rfq')){ this.goal = this.rfqGoal(p.get('name')||'', p.get('site')||''); this.allowSubmit = false; }
+            if(p.get('rfq')){ this.goal = this.rfqGoal(p.get('name')||'', p.get('site')||''); this.allowSubmit = false; this.isRfq = true; this.rfqSite = p.get('site')||''; this.rfqName = p.get('name')||''; }
             else if(p.get('goal')){ this.goal = p.get('goal'); }
             if(u && (p.get('rfq')||p.get('autostart'))){ this.$nextTick(()=> this.launch()); }
           }catch(e){ /* no-op */ }
@@ -180,7 +181,7 @@
           this.running=true; this.status="running"; this.frame=null; this.steps=[]; this.stepCount=0; this.result=null; this.currentUrl=targetUrl; this.goalShown=this.goal;
           let r;
           try{
-            r = await (await fetch("/api/mission",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({goal:this.goal,url:targetUrl,allow_submit:this.allowSubmit})})).json();
+            r = await (await fetch("/api/mission",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({goal:this.goal,url:targetUrl,allow_submit:this.allowSubmit,rfq:this.isRfq,site:this.rfqSite,name:this.rfqName})})).json();
           }catch(e){ this.status="failed"; this.running=false; this.steps.unshift({kind:'recover',label:'error',text:'Could not start mission: '+e}); return; }
           const es = new EventSource(r.stream_url);
           es.onmessage = (m)=>{

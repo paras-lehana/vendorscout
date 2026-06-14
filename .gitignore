@@ -43,3 +43,7 @@ tmp/
 
 # Internal planning/strategy docs — kept local, not published
 docs/
+
+# Internal — not for the public submission (kept local only)
+AGENTS.md
+PITCH.md

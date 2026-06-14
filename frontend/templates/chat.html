@@ -270,12 +270,15 @@
                         <button @click="copySummary(m)" class="pill border press" title="Copy the summary + top picks"
                                 :class="m.copied?'border-emerald-400/40 bg-emerald-500/15 text-emerald-300':'border-white/10 text-slate-300 hover:bg-white/5'"
                                 x-text="m.copied?'✓ Copied':'⧉ Copy'"></button>
-                        <span class="pill border border-white/10"
+                        <span x-show="!m.minimized" class="pill border border-white/10"
                               :class="(m.compare||[]).length===2 ? 'bg-cyan-500/15 text-cyan-200 border-cyan-400/40':'text-slate-400'"
                               x-text="(m.compare||[]).length===2?'Comparing 2':((m.compare||[]).length===1?'Pick 1 more':(m.detail!=null?'Detail':'Tick 2 to compare'))"></span>
+                        <button @click="m.minimized=!m.minimized" class="pill border border-white/10 text-slate-300 hover:bg-white/5 press"
+                                :title="m.minimized?'Expand report':'Minimise report'" x-text="m.minimized?'▢ Expand':'— Minimise'"></button>
                       </div>
                     </div>
 
+                    <div x-show="!m.minimized">
                     <!-- ===================== COMPARE VIEW ===================== -->
                     <template x-if="(m.compare||[]).length===2">
                       <div class="grid lg:grid-cols-[190px_1fr_190px] gap-3">
@@ -495,6 +498,7 @@
                                 class="px-4 py-2 rounded-lg text-[13px] font-semibold btn-grad disabled:opacity-40">Ask</button>
                       </form>
                     </div>
+                    </div><!-- /minimisable body -->
                   </div>
                 </template>
 

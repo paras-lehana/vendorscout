@@ -552,6 +552,45 @@ class BrowserAgentClient:
             await _emit(on_update, {"type": "ERROR", "runId": run_id, "message": str(e)})
             return self._finish(False, url, run_id, extracted, history, transcript, started, error=str(e))
 
+    async def live_preview_streaming(
+        self, url: str, on_update: OnUpdate = None, run_id: str = "",
+        pane: str = "IndiaMART", label: str = "IndiaMART", frames: int = 5,
+    ) -> None:
+        """Lightweight live-browser preview for the SEARCH cockpit.
+
+        Navigates the real marketplace listings page and streams a few real
+        screenshots while scrolling, so the user watches the agent "browse" live
+        (the running agentic view) — WITHOUT the heavy per-step LLM loop or a
+        second concurrent browser (which previously stalled the run). Emits STEP
+        frames tagged with `pane` so the cockpit shows them in that pane's live
+        view. Best-effort and self-contained: never raises.
+        """
+        captions = [
+            f"Opening {label} listings…", f"Scanning supplier cards…",
+            f"Reading names, prices & locations…", f"Collecting matching suppliers…",
+            f"Compiling the {label} shortlist…", f"Cross-checking the best matches…"]
+        try:
+            async with self._new_page(url) as page:
+                await _emit(on_update, {"type": "STEP", "runId": run_id, "pane": pane,
+                                        "thought": captions[0]})
+                with contextlib.suppress(Exception):
+                    await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                await page.wait_for_timeout(1100)
+                with contextlib.suppress(Exception):
+                    await page.keyboard.press("Escape")  # dismiss any auto-popup
+                for i in range(max(1, frames)):
+                    with contextlib.suppress(Exception):
+                        png = await page.screenshot(type="jpeg", quality=55, full_page=False)
+                        await _emit(on_update, {
+                            "type": "STEP", "runId": run_id, "pane": pane,
+                            "thought": captions[min(i, len(captions) - 1)],
+                            "screenshot": base64.b64encode(png).decode("ascii")})
+                    with contextlib.suppress(Exception):
+                        await page.mouse.wheel(0, 620)
+                    await page.wait_for_timeout(1050)
+        except Exception as e:  # noqa: BLE001 — preview is decorative; never fail the search
+            logger.warning("live preview failed for %s: %s", url, e)
+
     async def run_batch(self, tasks: list[dict]) -> list[BrowserResult]:
         async def _one(t: dict) -> BrowserResult:
             return await self.run_task(

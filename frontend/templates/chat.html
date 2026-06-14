@@ -655,7 +655,7 @@ function chat(){
         if(m._t0) m.elapsed=Math.round((performance.now()-m._t0)/1000);
         const pane = ev.pane ? (m.panes||[]).find(p=>p.site===ev.pane) : null;
         if(t==='PANES'){ m.panes=(ev.panes||[]).map(pp=>({site:pp.site,found:pp.found,frame:null,status:'Opening…',step:'',items:[]})); }
-        else if(t==='PANE_DATA'){ if(pane){ pane.items=ev.items||[]; if(ev.status) pane.status=ev.status; } }
+        else if(t==='PANE_DATA'){ if(pane){ pane.items=ev.items||[]; if(ev.found!=null) pane.found=ev.found; if(ev.status) pane.status=ev.status; } }
         else if(t==='PANE_STATUS'){ if(pane) pane.status=ev.status; }
         else if(t==='PHASE'){ m.phaseMsg=ev.message; if(ev.phase) m.phase=ev.phase; }
         else if(t==='STEP'){

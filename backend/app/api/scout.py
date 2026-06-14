@@ -14,6 +14,7 @@
 # ============================================================
 
 import asyncio
+import contextlib
 import json
 import logging
 import re
@@ -24,7 +25,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
 from app.tools.browser_agent import BrowserAgentClient
-from app.tools.indiamart_seo import fetch_seo_suppliers, load_seed_suppliers
+from app.tools.indiamart_seo import fetch_seo_suppliers, load_seed_suppliers, _candidate_urls
 from app.tools.tradeindia import fetch_tradeindia_suppliers
 from urllib.parse import quote
 from app.tools.llm import LLMTool
@@ -227,6 +228,25 @@ async def _run_scout(run_id: str, req: ScoutRequest):
         # top picks are the best overall, not just from one marketplace.
         await _emit(q, run_id, {"type": "PHASE", "phase": "scout",
                                 "message": f"Scouting IndiaMART + TradeIndia for “{search_query}”…"})
+
+        # Show the two marketplace panes IMMEDIATELY (no empty wait) and start a
+        # single lightweight LIVE BROWSER over the real IndiaMART listings, streaming
+        # its screenshots into the IndiaMART pane while the data fetch + scoring run in
+        # parallel. This is the "running agentic view" — one browser, decorative, never
+        # blocks the report (we only await it briefly before finishing).
+        await _emit(q, run_id, {"type": "PANES", "panes": [
+            {"site": "IndiaMART", "found": None}, {"site": "TradeIndia", "found": None}]})
+        await _emit(q, run_id, {"type": "PANE_STATUS", "pane": "IndiaMART", "status": "Opening live browser…"})
+        await _emit(q, run_id, {"type": "PANE_STATUS", "pane": "TradeIndia", "status": "Searching…"})
+        preview_task = None
+        try:
+            _cu = _candidate_urls(search_query)
+            if _cu:
+                preview_task = asyncio.create_task(_browser.live_preview_streaming(
+                    _cu[0], on_update, run_id=run_id, pane="IndiaMART", label="IndiaMART"))
+        except Exception:  # noqa: BLE001
+            preview_task = None
+
         im_res, ti_res = await asyncio.gather(
             fetch_seo_suppliers(search_query, req.max_vendors),
             fetch_tradeindia_suppliers(search_query, req.max_vendors),
@@ -255,17 +275,18 @@ async def _run_scout(run_id: str, req: ScoutRequest):
             return [{"name": v.get("name"), "price": v.get("price"),
                      "location": v.get("location")} for v in (vs or [])[:6]]
 
-        await _emit(q, run_id, {"type": "PANES", "panes": [
-            {"site": "IndiaMART", "found": len(catalog)},
-            {"site": "TradeIndia", "found": len(tradeindia)}]})
-        await _emit(q, run_id, {"type": "STEP", "pane": "IndiaMART",
-                                "thought": f"Read {len(catalog)} IndiaMART listings — names, prices, locations."})
-        await _emit(q, run_id, {"type": "PANE_DATA", "pane": "IndiaMART", "items": _rows(catalog),
-                                "status": (f"{len(catalog)} found" if catalog else "no listings")})
-        await _emit(q, run_id, {"type": "STEP", "pane": "TradeIndia",
+        # NOTE: do NOT re-emit PANES here — it would recreate the panes and wipe the
+        # live-browser frame streaming into the IndiaMART pane. Update counts/rows via
+        # PANE_DATA (carries `found`). IndiaMART keeps its live browser view; TradeIndia
+        # shows its lead rows.
+        await _emit(q, run_id, {"type": "STEP",
                                 "thought": f"Read {len(tradeindia)} TradeIndia listings — names, prices, locations."})
         await _emit(q, run_id, {"type": "PANE_DATA", "pane": "TradeIndia", "items": _rows(tradeindia),
+                                "found": len(tradeindia),
                                 "status": (f"{len(tradeindia)} found" if tradeindia else "no listings")})
+        await _emit(q, run_id, {"type": "PANE_DATA", "pane": "IndiaMART", "items": _rows(catalog),
+                                "found": len(catalog),
+                                "status": (f"{len(catalog)} found" if catalog else "live browser")})
         browser_vendors = []
 
         # ---- 2c. MERGE both marketplaces (interleaved) + choose source ----
@@ -316,6 +337,15 @@ async def _run_scout(run_id: str, req: ScoutRequest):
             report["executive_summary"] = report["summary"] = (
                 "No suppliers could be extracted for this query. Try a more specific "
                 "product name (e.g. 'Hitachi 1.5 ton split AC').")
+
+        # Let the live-browser preview finish its frames (it ran in parallel with the
+        # fetch + scoring, so this usually returns immediately) — capped so it can never
+        # delay the report by more than a couple of seconds.
+        if preview_task:
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(preview_task, timeout=4)
+            if not preview_task.done():
+                preview_task.cancel()
 
         st["status"] = "completed"
         st["report"] = report

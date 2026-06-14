@@ -343,19 +343,21 @@ async def _run_scout(run_id: str, req: ScoutRequest):
         # the Sign-In / Send-OTP gate (confirm-before-send). Best-effort: it never
         # breaks the report. Users can re-run it on any product from the report.
         top = next((v for v in report["vendors"]
-                    if _is_indiamart_product_url(v.get("url"))), None)
+                    if _is_real_product_url(v.get("url"))), None)
         if top:
+            _site = top.get("source_site") or "the marketplace"
             await _emit(q, run_id, {"type": "PHASE", "phase": "act",
-                                    "message": f"Drafting an enquiry to the top match — {top.get('name')}…"})
+                                    "message": f"Drafting an enquiry to the top match — {top.get('name')} ({_site})…"})
             try:
                 rfq_goal = (
-                    f"You are on the IndiaMART product page for '{top.get('product') or top.get('name')}'. "
-                    "Start a Request-for-Quote: open 'Get Best Price' / 'Send Enquiry' (if a login or "
-                    "enquiry popup is already open, work WITH it — do not click behind a backdrop). FILL "
-                    "the enquiry form with DUMMY buyer details — Quantity:'12', Requirement:'Need 12 units "
-                    "in bulk; share best price, MOQ, lead time, certifications.', Mobile:'9000000000', "
-                    "Name:'Demo Buyer', Email:'buyer@example.com'. Then STOP — do NOT sign in / send OTP / "
-                    "submit (we confirm before sending). Return JSON {filled:true, fields_filled:[...], "
+                    f"You are on the {_site} product page for '{top.get('product') or top.get('name')}'. "
+                    "Start a Request-for-Quote: open the enquiry button ('Get Best Price' / 'Send Enquiry' on "
+                    "IndiaMART, or 'Send Inquiry' / 'Contact Supplier' on TradeIndia; if a login or enquiry "
+                    "popup is already open, work WITH it — do not click behind a backdrop). FILL the enquiry "
+                    "form with DUMMY buyer details — Quantity:'12', Requirement:'Need 12 units in bulk; share "
+                    "best price, MOQ, lead time, certifications.', Mobile:'9000000000', Name:'Demo Buyer', "
+                    "Email:'buyer@example.com'. Then STOP — do NOT sign in / send OTP / submit (we confirm "
+                    "before sending). Return JSON {filled:true, fields_filled:[...], "
                     "stopped_at:'<the Sign-In/OTP/submit gate you reached>'}."
                 )
                 act = await _browser.run_task_streaming(

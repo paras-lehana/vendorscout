@@ -322,9 +322,11 @@
                             </div>
                           </template>
                           <div class="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-white/10">
-                            <a :href="cmpA(m).url&&String(cmpA(m).url).includes('proddetail')?'/theater?rfq=1&url='+encodeURIComponent(cmpA(m).url)+'&name='+encodeURIComponent(cmpA(m).name||''):'#'" target="_blank"
+                            <a :href="canRFQ(cmpA(m).url)?rfqHref(cmpA(m)):'#'" target="_blank"
+                               :class="canRFQ(cmpA(m).url)?'':'opacity-40 pointer-events-none'"
                                class="text-center text-[13px] py-2 rounded-md bg-indigo-500/80 hover:bg-indigo-500 text-white font-medium">Request quote</a>
-                            <a :href="cmpB(m).url&&String(cmpB(m).url).includes('proddetail')?'/theater?rfq=1&url='+encodeURIComponent(cmpB(m).url)+'&name='+encodeURIComponent(cmpB(m).name||''):'#'" target="_blank"
+                            <a :href="canRFQ(cmpB(m).url)?rfqHref(cmpB(m)):'#'" target="_blank"
+                               :class="canRFQ(cmpB(m).url)?'':'opacity-40 pointer-events-none'"
                                class="text-center text-[13px] py-2 rounded-md bg-cyan-500/80 hover:bg-cyan-500 text-white font-medium">Request quote</a>
                           </div>
                           <button @click="m.compare=[]" class="w-full mt-2.5 text-[13.5px] py-2 rounded-md border border-white/20 text-slate-200 hover:bg-white/5 hover:border-white/35 font-medium flex items-center justify-center gap-1.5">
@@ -382,7 +384,7 @@
                           </div>
                           <div class="flex items-center gap-3 mt-4 pt-3 border-t border-white/10">
                             <a x-show="v.url" :href="v.url" target="_blank" rel="noopener" class="text-[13px] text-cyan-400 hover:text-cyan-300">View on IndiaMART ↗</a>
-                            <a x-show="v.url && String(v.url).includes('proddetail')" :href="'/theater?rfq=1&url='+encodeURIComponent(v.url)+'&name='+encodeURIComponent(v.name||'')" target="_blank"
+                            <a x-show="canRFQ(v.url)" :href="rfqHref(v)" target="_blank"
                                class="text-[13px] ml-auto px-4 py-2 rounded-md bg-indigo-500/80 hover:bg-indigo-500 text-white font-medium">📨 Request quote</a>
                           </div>
                         </div>
@@ -455,7 +457,8 @@
                                         :class="(m.compare||[]).includes(o.i)?'text-cyan-300 border-cyan-400/40 bg-cyan-500/10':'text-slate-300'"
                                         x-text="(m.compare||[]).includes(o.i)?'✓ Compare':'+ Compare'"></button>
                                 <button @click="openDetail(m,o.i)" class="text-[13.5px] text-slate-400 hover:text-cyan-300">Details</button>
-                                <a x-show="o.v.url" :href="o.v.url" target="_blank" rel="noopener" class="text-[13.5px] text-cyan-400 hover:text-cyan-300 ml-auto">View ↗</a>
+                                <a x-show="canRFQ(o.v.url)" :href="rfqHref(o.v)" target="_blank" class="text-[13.5px] text-emerald-300 hover:text-emerald-200 ml-auto" title="Watch the agent fill an enquiry & stop before sending">📨 Quote</a>
+                                <a x-show="o.v.url" :href="o.v.url" target="_blank" rel="noopener" class="text-[13.5px] text-cyan-400 hover:text-cyan-300" :class="canRFQ(o.v.url)?'':'ml-auto'">View ↗</a>
                               </div>
                             </div>
                           </template>
@@ -605,6 +608,8 @@ function chat(){
     srcLabel(s){ return s==='live'?'🟢 Live scrape':s==='catalog'?'📚 IndiaMART catalog':s==='sample'?'🗂 Real sample':'source'; },
     sitesLabel(m){ const s=(m.report&&m.report.sites)||[]; return s.length?('📚 '+s.join(' + ')):this.srcLabel(m.report?m.report.source:''); },
     siteCls(s){ return s==='TradeIndia'?'bg-teal-500/15 text-teal-300 border border-teal-400/30':'bg-indigo-500/15 text-indigo-300 border border-indigo-400/30'; },
+    canRFQ(u){ u=String(u||''); return u.includes('indiamart.com/proddetail')||u.includes('tradeindia.com/products'); },
+    rfqHref(v){ return '/theater?rfq=1&url='+encodeURIComponent((v&&v.url)||'')+'&name='+encodeURIComponent((v&&v.name)||'')+'&site='+encodeURIComponent((v&&v.source_site)||''); },
     evTip(v,k){ const e=v.evidence&&v.evidence[k]; if(!e) return k; return (e.verifiable?'Seen in listing':'Not on listing — verify on supplier visit')+(e.note?': '+e.note:''); },
     dimPct(v,k){ const e=v.evidence&&v.evidence[k]; if(!e||!e.verifiable) return 8; const s=(e.score==null?60:e.score); return Math.max(12,Math.min(100,s)); },
     dimColor(v,k){ const e=v.evidence&&v.evidence[k]; if(!e||!e.verifiable) return 'bg-slate-600/40'; const s=(e.score==null?60:e.score); return s>=75?'bg-emerald-400':s>=50?'bg-cyan-400':'bg-amber-400'; },
